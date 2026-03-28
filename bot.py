@@ -1,6 +1,3 @@
-“””
-Бот для СТО Farro
-“””
 import os, re, json, logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
