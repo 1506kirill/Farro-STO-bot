@@ -43,7 +43,8 @@ FLEET_CARS = {
 CAR_NAMES = {
     # Toyota
     'камри':    'Toyota Camry',   'кемри':  'Toyota Camry',
-    'камрi':    'Toyota Camry',   'camry':  'Toyota Camry',
+    'камрi':    'Toyota Camry',   'кемрi':  'Toyota Camry',
+    'camry':  'Toyota Camry',   'кемра':  'Toyota Camry',
     'прадо':    'Toyota Land Cruiser Prado',
     'прадiк':   'Toyota Land Cruiser Prado',
     'прадик':   'Toyota Land Cruiser Prado',
@@ -142,6 +143,165 @@ CAR_NAMES = {
     'ланос':    'Daewoo Lanos',   'lanos':  'Daewoo Lanos',
     'сенс':     'Daewoo Sens',
     'нексiя':   'Daewoo Nexia',
+    # Nissan
+    'рог':      'Nissan Rogue',   'rogue':  'Nissan Rogue',
+    'мурано':   'Nissan Murano',  'murano': 'Nissan Murano',
+    'примера':  'Nissan Primera',
+    'примира':  'Nissan Primera',
+    'ноут':     'Nissan Note',    'note':   'Nissan Note',
+    'джук':     'Nissan Juke',    'juke':   'Nissan Juke',
+    'ексклюзив':'Nissan X-Trail', 'xtrail': 'Nissan X-Trail',
+    'iкстрейл': 'Nissan X-Trail', 'x-trail':'Nissan X-Trail',
+    'максима':  'Nissan Maxima',
+    # Toyota (доп.)
+    'хайс':     'Toyota HiAce',   'хайас':  'Toyota HiAce',
+    'хайлюкс':  'Toyota Hilux',   'хiлюкс': 'Toyota Hilux',
+    'харрiєр':  'Toyota Harrier',
+    'пiкнiк':   'Toyota Picnic',
+    'версо':    'Toyota Verso',
+    'iнова':    'Toyota Innova',
+    'форчунер': 'Toyota Fortuner',
+    'авалон':   'Toyota Avalon',
+    'сiєна':    'Toyota Sienna',
+    'хайбрид':  'Toyota Hybrid',
+    # Hyundai (доп.)
+    'хюндай':   'Hyundai',
+    'елантра':  'Hyundai Elantra','elantra':'Hyundai Elantra',
+    'i30':      'Hyundai i30',
+    'i40':      'Hyundai i40',
+    'велостер': 'Hyundai Veloster',
+    'матрiкс':  'Hyundai Matrix',
+    'гетц':     'Hyundai Getz',   'getz':   'Hyundai Getz',
+    'грандер':  'Hyundai Grandeur',
+    'гранд':    'Hyundai Grand Santa Fe',
+    # Kia (доп.)
+    'пiканто':  'Kia Picanto',    'picanto':'Kia Picanto',
+    'стiнгер':  'Kia Stinger',
+    'соул':     'Kia Soul',       'soul':   'Kia Soul',
+    'каренс':   'Kia Carens',
+    'оптима':   'Kia Optima',     'optima': 'Kia Optima',
+    'магентiс': 'Kia Magentis',
+    'церато':   'Kia Cerato',     'cerato': 'Kia Cerato',
+    # Mercedes (доп.)
+    'вiто':     'Mercedes-Benz Vito',
+    'спрiнтер': 'Mercedes-Benz Sprinter',
+    'сiшка':    'Mercedes-Benz C-Class',
+    'ешка':     'Mercedes-Benz E-Class',
+    'есiшка':   'Mercedes-Benz S-Class',
+    'глк':      'Mercedes-Benz GLK',
+    'гле':      'Mercedes-Benz GLE',
+    'гла':      'Mercedes-Benz GLA',
+    'ml':       'Mercedes-Benz ML',
+    # BMW (доп.)
+    'трiйка':   'BMW 3 Series',
+    'пятiрка':  'BMW 5 Series',
+    'сьомка':   'BMW 7 Series',
+    'iкс5':     'BMW X5',         'x5':     'BMW X5',
+    'iкс3':     'BMW X3',         'x3':     'BMW X3',
+    'iкс6':     'BMW X6',         'x6':     'BMW X6',
+    # Audi (доп.)
+    'а4':       'Audi A4',        'a4':     'Audi A4',
+    'а6':       'Audi A6',        'a6':     'Audi A6',
+    'а8':       'Audi A8',        'a8':     'Audi A8',
+    'куатро':   'Audi Quattro',
+    'ку7':      'Audi Q7',        'q7':     'Audi Q7',
+    'ку5':      'Audi Q5',        'q5':     'Audi Q5',
+    'ку3':      'Audi Q3',        'q3':     'Audi Q3',
+    'тт':       'Audi TT',        'tt':     'Audi TT',
+    # Volkswagen (доп.)
+    'транспортер':'Volkswagen Transporter',
+    'транс':    'Volkswagen Transporter',
+    'каравела': 'Volkswagen Caravelle',
+    'кадди':    'Volkswagen Caddy',
+    'кроссполо':'Volkswagen CrossPolo',
+    'шаран':    'Volkswagen Sharan',
+    'туран':    'Volkswagen Touran',
+    # Jeep
+    'чероки':   'Jeep Cherokee',  'cherokee':'Jeep Cherokee',
+    'гранд чероки':'Jeep Grand Cherokee',
+    'ренегад':  'Jeep Renegade',
+    'компас':   'Jeep Compass',
+    'рiнегат':  'Jeep Renegade',
+    # Subaru
+    'форестер': 'Subaru Forester','forester':'Subaru Forester',
+    'iмпреза':  'Subaru Impreza', 'impreza':'Subaru Impreza',
+    'аутбек':   'Subaru Outback', 'outback':'Subaru Outback',
+    'легасi':   'Subaru Legacy',
+    'субара':   'Subaru',
+    # Lexus
+    'лексус':   'Lexus',          'lexus':  'Lexus',
+    'rx':       'Lexus RX',       'рх':     'Lexus RX',
+    'is':       'Lexus IS',
+    'es':       'Lexus ES',
+    'lx':       'Lexus LX',
+    # Porsche
+    'кайен':    'Porsche Cayenne','cayenne':'Porsche Cayenne',
+    'панамера': 'Porsche Panamera',
+    'макан':    'Porsche Macan',  'macan':  'Porsche Macan',
+    # Land Rover
+    'дефендер': 'Land Rover Defender',
+    'дiскавери':'Land Rover Discovery',
+    'дiскавери':'Land Rover Discovery',
+    'рейндж':   'Range Rover',
+    'рендж':    'Range Rover',    'rangerover':'Range Rover',
+    'фрiлендер':'Land Rover Freelander',
+    # Mitsubishi (доп.)
+    'еклiпс':   'Mitsubishi Eclipse',
+    'галант':   'Mitsubishi Galant',
+    'делiка':   'Mitsubishi Delica',
+    'монтеро':  'Mitsubishi Montero',
+    # Volvo
+    'вольво':   'Volvo',          'volvo':  'Volvo',
+    # Peugeot
+    'пежо':     'Peugeot',        'peugeot':'Peugeot',
+    '308':      'Peugeot 308',
+    '408':      'Peugeot 408',
+    '508':      'Peugeot 508',
+    # Citroen
+    'сiтроен':  'Citroen',        'citroen':'Citroen',
+    'берлiнго': 'Citroen Berlingo',
+    'пiкассо':  'Citroen Picasso',
+    # Alfa Romeo
+    'альфа':    'Alfa Romeo',
+    'джульєтта':'Alfa Romeo Giulietta',
+    # Mazda (доп.)
+    'cx5':      'Mazda CX-5',     'сх5':    'Mazda CX-5',
+    'cx3':      'Mazda CX-3',
+    'cx7':      'Mazda CX-7',
+    'cx9':      'Mazda CX-9',
+    'мазда 3':  'Mazda 3',        'mazda3': 'Mazda 3',
+    'мазда 6':  'Mazda 6',        'mazda6': 'Mazda 6',
+    # Honda (доп.)
+    'пiлот':    'Honda Pilot',
+    'фiт':      'Honda Fit',
+    'джаз':     'Honda Jazz',
+    'iнсайт':   'Honda Insight',
+    'фрiд':     'Honda Freed',
+    # Chery / Geely / китайськi
+    'джилi':    'Geely',          'geely':  'Geely',
+    'черi':     'Chery',          'chery':  'Chery',
+    'тiгго':    'Chery Tiggo',    'tiggo':  'Chery Tiggo',
+    'джак':     'JAC',            'jac':    'JAC',
+    # Електро
+    'теслa':    'Tesla',          'tesla':  'Tesla',
+    'модел с':  'Tesla Model S',
+    'модел 3':  'Tesla Model 3',
+    'bolt':     'Chevrolet Bolt', 'болт':   'Chevrolet Bolt',
+    'лiф':      'Nissan Leaf',    'leaf':   'Nissan Leaf',
+    # UAZ / ГАЗ
+    'уаз':      'UAZ',
+    'газель':   'ГАЗ Газель',
+    'буханка':  'UAZ-452',
+    # Мiкроавтобуси
+    'спрiнтер': 'Mercedes-Benz Sprinter',
+    'транзит':  'Ford Transit',   'transit':'Ford Transit',
+    'дукато':   'Fiat Ducato',    'ducato': 'Fiat Ducato',
+    'боксер':   'Peugeot Boxer',
+    # Пiкапи
+    'таккома':  'Toyota Tacoma',
+    'рейдер':   'Mitsubishi Raider',
+    'навара':   'Nissan Navara',
+    'амарок':   'Volkswagen Amarok',
 }
 
 
@@ -707,6 +867,10 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_cb))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
     logger.info('СТО бот {} запущен!'.format(STO_NAME))
+    logger.info('CLAUDE_API_KEY present: {}'.format(bool(CLAUDE_API_KEY)))
+    logger.info('claude_client initialized: {}'.format(claude_client is not None))
+    logger.info('OWNER_ID: {}'.format(OWNER_ID))
+    logger.info('MASTER_IDS: {}'.format(MASTER_IDS))
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
