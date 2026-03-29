@@ -210,7 +210,7 @@ def polish_reply(raw):
                   'Перепиши украiнською мовою — красиво, ввiчливо, тепло, без помилок. '
                   'Збережи суть. Тiльки готовий текст.')
         resp = claude_client.messages.create(
-            model='claude-sonnet-4-20250514',
+            model='claude-haiku-4-5-20251001',
             max_tokens=400,
             messages=[{'role': 'user', 'content': prompt}])
         result = resp.content[0].text.strip()
