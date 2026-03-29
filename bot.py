@@ -26,6 +26,149 @@ CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY')
 STAFF_IDS     = list(set(MASTER_IDS + ([OWNER_ID] if OWNER_ID else [])))
 claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
 
+# 26 машин автопарку (короткi ID)
+FLEET_CARS = {
+    '0418': 'АЕ0418ОР', '2993': 'АЕ2993РI', '7935': 'AE7935PI',
+    '3021': 'КА3021ЕО', '9489': 'КА9489ЕР', '7121': 'АЕ7121ТА',
+    '8204': 'АЕ8204ТВ', '2548': 'AE2548TB', '9245': 'АЕ9245ТО',
+    '0736': 'AE0736PK', '4715': 'AE4715TH', '6514': 'АЕ6514ТС',
+    '4895': 'KA4895HE', '6843': 'KA6843HB', '5308': 'АЕ5308ТЕ',
+    '1875': 'BI1875HO', '0665': 'KA0665IH', '0349': 'KA0349HO',
+    '9854': 'BC9854PM', '8391': 'АЕ8391ТМ', '4553': 'AE4553XB',
+    '8730': 'KA8730IX', '5725': 'AE5725OO', '6584': 'СА6584КА',
+    '3531': 'AI3531PH', '1457': 'AI1457MM',
+}
+
+# Словник розпiзнавання назв авто з опечатками
+CAR_NAMES = {
+    # Toyota
+    'камри':    'Toyota Camry',   'кемри':  'Toyota Camry',
+    'камрi':    'Toyota Camry',   'camry':  'Toyota Camry',
+    'прадо':    'Toyota Land Cruiser Prado',
+    'прадiк':   'Toyota Land Cruiser Prado',
+    'прадик':   'Toyota Land Cruiser Prado',
+    'prado':    'Toyota Land Cruiser Prado',
+    'rav4':     'Toyota RAV4',    'рав4':   'Toyota RAV4',
+    'рав':      'Toyota RAV4',    'рафiк':  'Toyota RAV4',
+    'крузак':   'Toyota Land Cruiser',
+    'крузер':   'Toyota Land Cruiser',
+    'хайлендер':'Toyota Highlander',
+    'корола':   'Toyota Corolla', 'corolla':'Toyota Corolla',
+    'авенсiс':  'Toyota Avensis',
+    'версо':    'Toyota Verso',
+    'ярис':     'Toyota Yaris',
+    # Skoda
+    'октавiя':  'Skoda Octavia',  'octavia':'Skoda Octavia',
+    'октавия':  'Skoda Octavia',
+    'суперб':   'Skoda Superb',   'superb': 'Skoda Superb',
+    'рапiд':    'Skoda Rapid',    'rapid':  'Skoda Rapid',
+    'кодiак':   'Skoda Kodiaq',   'kodiaq': 'Skoda Kodiaq',
+    'карок':    'Skoda Karoq',    'karoq':  'Skoda Karoq',
+    'фабiя':    'Skoda Fabia',    'fabia':  'Skoda Fabia',
+    # Volkswagen
+    'пассат':   'Volkswagen Passat',
+    'тiгуан':   'Volkswagen Tiguan',
+    'гольф':    'Volkswagen Golf',
+    'джетта':   'Volkswagen Jetta',
+    'поло':     'Volkswagen Polo',
+    'туарег':   'Volkswagen Touareg',
+    # BMW
+    'бмв':      'BMW',            'bmw':    'BMW',
+    'бумер':    'BMW',            'бумба':  'BMW',
+    # Mercedes
+    'мерс':     'Mercedes-Benz',  'мерседес':'Mercedes-Benz',
+    'mercedes': 'Mercedes-Benz',
+    'гелик':    'Mercedes-Benz G-Class',
+    'гелiкоптер':'Mercedes-Benz G-Class',
+    # Audi
+    'аудi':     'Audi',           'audi':   'Audi',
+    'ауди':     'Audi',
+    # Hyundai
+    'хундай':   'Hyundai',        'hyundai':'Hyundai',
+    'хундаi':   'Hyundai',
+    'туксон':   'Hyundai Tucson', 'tucson': 'Hyundai Tucson',
+    'солярiс':  'Hyundai Solaris',
+    'акцент':   'Hyundai Accent',
+    'санта фе': 'Hyundai Santa Fe',
+    # Kia
+    'спортаж':  'Kia Sportage',   'sportage':'Kia Sportage',
+    'сорento':  'Kia Sorento',    'sorento':'Kia Sorento',
+    'сiд':      'Kia Ceed',       'сid':    'Kia Ceed',
+    'рiо':      'Kia Rio',        'rio':    'Kia Rio',
+    # Renault
+    'дастер':   'Renault Duster', 'duster': 'Renault Duster',
+    'логан':    'Renault Logan',  'logan':  'Renault Logan',
+    'каптур':   'Renault Captur',
+    'сандеро':  'Renault Sandero',
+    'мегане':   'Renault Megane',
+    # Ford
+    'фокус':    'Ford Focus',     'focus':  'Ford Focus',
+    'фьюжн':    'Ford Fusion',    'fusion': 'Ford Fusion',
+    'куга':     'Ford Kuga',      'kuga':   'Ford Kuga',
+    'мустанг':  'Ford Mustang',
+    # Opel
+    'астра':    'Opel Astra',     'astra':  'Opel Astra',
+    'вектра':   'Opel Vectra',
+    'зафiра':   'Opel Zafira',
+    'iнсiгнiя': 'Opel Insignia',
+    # Chevrolet
+    'авео':     'Chevrolet Aveo', 'aveo':   'Chevrolet Aveo',
+    'круз':     'Chevrolet Cruze','cruze':  'Chevrolet Cruze',
+    'каптiва':  'Chevrolet Captiva',
+    # Mitsubishi
+    'аутлендер':'Mitsubishi Outlander',
+    'паджеро':  'Mitsubishi Pajero',
+    'лансер':   'Mitsubishi Lancer',
+    # Nissan
+    'кашкай':   'Nissan Qashqai', 'qashqai':'Nissan Qashqai',
+    'кашкаi':   'Nissan Qashqai',
+    'тiiда':    'Nissan Tiida',
+    'альмера':  'Nissan Almera',
+    'патфайндер':'Nissan Pathfinder',
+    # Mazda
+    'мазда':    'Mazda',          'mazda':  'Mazda',
+    # Honda
+    'хонда':    'Honda',          'honda':  'Honda',
+    'цивiк':    'Honda Civic',    'civic':  'Honda Civic',
+    'аккорд':   'Honda Accord',   'accord': 'Honda Accord',
+    'crv':      'Honda CR-V',     'срв':    'Honda CR-V',
+    # Lada / ВАЗ
+    'жигулi':   'ВАЗ', 'жигули': 'ВАЗ',
+    'нива':     'Lada Niva',
+    'калiна':   'Lada Kalina',
+    'гранта':   'Lada Granta',
+    'веста':    'Lada Vesta',
+    # Daewoo
+    'ланос':    'Daewoo Lanos',   'lanos':  'Daewoo Lanos',
+    'сенс':     'Daewoo Sens',
+    'нексiя':   'Daewoo Nexia',
+}
+
+
+def normalize_car_name(text: str) -> str:
+    t = text.lower().strip()
+    # Спочатку точний збiг
+    if t in CAR_NAMES:
+        return CAR_NAMES[t]
+    # Пошук по частинi слова
+    for key, val in CAR_NAMES.items():
+        if key in t or t in key:
+            return val
+    # Якщо це короткий ID автопарку
+    digits = re.sub(r'[^0-9]', '', t)
+    if digits in FLEET_CARS:
+        return FLEET_CARS[digits]
+    # Повертаємо як є з першою великою
+    return text.strip().title()
+
+
+def resolve_fleet_car(text: str) -> str:
+    digits = re.sub(r'[^0-9]', '', text)
+    if digits in FLEET_CARS:
+        return FLEET_CARS[digits]
+    return text.upper()
+
+
 STO_INFO = {
     'sto': {
         'name':     'СТО Farro',
@@ -67,7 +210,7 @@ def today_str():
     return datetime.now(KYIV_TZ).strftime('%d.%m.%y')
 
 def parse_num(v):
-    s = re.sub(r'[^\d]', '', str(v or ''))
+    s = re.sub(r'[^0-9]', '', str(v or ''))
     try: return int(s) if s else None
     except: return None
 
@@ -252,10 +395,12 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ud['reg_phone'] = text; ud['reg_step'] = 'car'
         await update.message.reply_text('Номер вашого авто? (або - якщо немає)'); return
     if ud.get('reg_step') == 'car':
-        ud['reg_car'] = text.upper() if text != '-' else ''; ud['reg_step'] = 'model'
+        car_val = resolve_fleet_car(text) if text != '-' else ''
+        ud['reg_car'] = car_val; ud['reg_step'] = 'model'
         await update.message.reply_text('Марка i модель? (або -)'); return
     if ud.get('reg_step') == 'model':
-        save_client(uid, ud['reg_name'], ud['reg_phone'], ud.get('reg_car',''), text if text!='-' else '')
+        model = normalize_car_name(text) if text != '-' else ''
+        save_client(uid, ud['reg_name'], ud['reg_phone'], ud.get('reg_car',''), model)
         name = ud['reg_name']; ud.clear()
         await update.message.reply_text('Дякуємо, {}! Зареєстрованi.'.format(name), reply_markup=kb_main_client()); return
 
