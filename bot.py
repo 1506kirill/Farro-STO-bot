@@ -378,23 +378,27 @@ def is_staff(uid):
     return uid in STAFF_IDS
 
 def polish_reply(raw):
-    logger.info('polish_reply called. has_claude={}'.format(claude_client is not None))
+    logger.info('polish_reply CALLED. raw={}'.format(raw[:50]))
+    logger.info('claude_client is None: {}'.format(claude_client is None))
     if not claude_client:
+        logger.warning('No claude_client - returning raw text')
         return raw
     try:
-        prompt = ('Ти ввiчливий менеджер автосервiсу Farro. '
-                  'Майстер написав вiдповiдь клiєнту: ' + raw + '. '
-                  'Перепиши украiнською мовою красиво, ввiчливо, зрозумiло, без помилок. '
-                  'Збережи змiст. Тiльки готовий текст без пояснень.')
+        logger.info('Calling Claude API...')
+        prompt = ('Ти ввiчливий та теплий менеджер автосервiсу Farro. '
+                  'Майстер написав: ' + raw + '. '
+                  'Перепиши украiнською мовою — красиво, ввiчливо, детально, без помилок. '
+                  'Додай привiтнiсть та турботу. Збережи суть. '
+                  'Вiдповiдай тiльки готовим текстом без будь-яких пояснень.')
         resp = claude_client.messages.create(
             model='claude-sonnet-4-20250514',
-            max_tokens=300,
+            max_tokens=400,
             messages=[{'role': 'user', 'content': prompt}])
         result = resp.content[0].text.strip()
-        logger.info('polish result: {}'.format(result[:80]))
+        logger.info('Claude result: {}'.format(result[:100]))
         return result if result else raw
     except Exception as e:
-        logger.error('polish_reply error: {}'.format(e))
+        logger.error('polish_reply ERROR: {}'.format(e))
         return raw
 
 def get_client(tg_id):
@@ -463,16 +467,24 @@ def get_orders_by_car(car):
 
 def kb_welcome():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Дiзнатися статус мого авто', callback_data='w_status')],
-        [InlineKeyboardButton('Записатися на послугу',      callback_data='w_new')],
+        [InlineKeyboardButton('Послуги та цiни',       callback_data='w_prices')],
+        [InlineKeyboardButton('Статус мого авто',       callback_data='w_status')],
+        [InlineKeyboardButton('Записатися на ремонт',   callback_data='w_new')],
+        [InlineKeyboardButton('Написати менеджеру',     callback_data='w_manager')],
     ])
 
 def kb_main_client():
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton('Послуги та цiни',       callback_data='w_prices')],
         [InlineKeyboardButton('Статус мого авто',      callback_data='c_status')],
-        [InlineKeyboardButton('Записатися на послугу', callback_data='w_new')],
+        [InlineKeyboardButton('Записатися на ремонт',  callback_data='w_new')],
         [InlineKeyboardButton('Мої заявки',            callback_data='c_requests')],
-        [InlineKeyboardButton('Написати майстру',      callback_data='c_contact')],
+        [InlineKeyboardButton('Написати менеджеру',    callback_data='c_contact')],
+    ])
+
+def kb_reply_to_sto():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton('Вiдповiсти менеджеру', callback_data='c_contact')],
     ])
 
 def kb_choose_sto():
@@ -671,6 +683,30 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kb = kb_staff_main() if is_staff(uid) else kb_main_client()
         await q.edit_message_text('Скасовано.', reply_markup=kb); return
 
+    if data == 'w_prices':
+        p1 = 'Послуги та цiни СТО Farro\n'
+        p2 = '\nСТО (вул. Хмельницького 4а):\n'
+        p3 = 'ГБО — вiд 8 000 грн\n'
+        p4 = 'Розвал-сходження 3D — 800 грн\n'
+        p5 = 'Автокондицiонери — вiд 500 грн\n'
+        p6 = 'Ремонт ходової — вiд 300 грн/год\n'
+        p7 = 'Пайка пластику — вiд 400 грн\n'
+        p8 = '\nКузовний сервiс (вул. Чубинського 2а):\n'
+        p9 = 'Рихтування — вiд 500 грн/елемент\n'
+        p10 = 'Покраска — вiд 1 500 грн/елемент\n'
+        p11 = 'PDR (вмятини без покраски) — вiд 600 грн\n'
+        p12 = '\nТочну вартiсть — пiсля огляду. Графiк: ПН-ПТ 09:00-18:00'
+        prices = p1+p2+p3+p4+p5+p6+p7+p8+p9+p10+p11+p12
+        kb = kb_main_client() if get_client(uid) else kb_welcome()
+        await q.edit_message_text(prices, reply_markup=kb)
+        return
+
+    if data == 'w_manager':
+        ud['wait_client_msg'] = True
+        msg = 'Напишiть питання — менеджер вiдповiсть найближчим часом. Реєстрацiя не потрiбна!'
+        await q.edit_message_text(msg, reply_markup=kb_cancel())
+        return
+
     if data == 'w_status':
         ud['wait_car_status'] = True
         await q.edit_message_text('Введiть номер вашого авто:', reply_markup=kb_cancel()); return
@@ -787,7 +823,8 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 if client_id:
                     try:
                         await ctx.bot.send_message(chat_id=int(client_id),
-                            text='Ваш автомобiль готовий!\nАвто: {}\nПослуга: {}\n{}\nЧекаємо вас! СТО Farro'.format(car, service, sto_name))
+                            text='Ваш автомобiль готовий!\nАвто: {}\nПослуга: {}\n{}\nЧекаємо вас! СТО Farro'.format(car, service, sto_name),
+                            reply_markup=kb_reply_to_sto())
                     except Exception as e: logger.error('ready: {}'.format(e))
                 await q.edit_message_text('Заявка {} готова. Клiєнта повiдомлено.'.format(rid), reply_markup=kb_staff_main())
                 return
