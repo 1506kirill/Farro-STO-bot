@@ -3,6 +3,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional
 import gspread
+import anthropic
 from google.oauth2.service_account import Credentials
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -23,6 +24,9 @@ MASTER_IDS     = [int(x.strip()) for x in os.environ.get('MASTER_IDS','').split(
 
 # Все сотрудники = мастера + владелец
 STAFF_IDS = list(set(MASTER_IDS + ([OWNER_ID] if OWNER_ID else [])))
+
+CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY')
+claude_client  = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
 
 # Два СТО
 STO_INFO = {
@@ -71,6 +75,29 @@ SERVICE_ROUTING: Dict[str, List[int]] = {
     'Видалення вм\'ятин без покраски (PDR)': STAFF_IDS,
     'Інше':                            STAFF_IDS,
 }
+
+def polish_master_reply(raw_text: str) -> str:
+    if not claude_client:
+        return raw_text
+    try:
+        prompt = (
+            'Ти — ввічливий менеджер автосервісу Farro. '
+            'Майстер написав відповідь клієнту: "{}". '
+            'Перепиши цю відповідь українською мовою — красиво, ввічливо, зрозуміло, без помилок. '
+            'Зберіть зміст повідомлення майстра. '
+            'Не додавай зайвого. Відповідай тільки готовим текстом без пояснень.'
+        ).format(raw_text)
+        resp = claude_client.messages.create(
+            model='claude-sonnet-4-20250514',
+            max_tokens=300,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        result = resp.content[0].text.strip()
+        return result if result else raw_text
+    except Exception as e:
+        logger.error('polish_master_reply: {}'.format(e))
+        return raw_text
+
 
 def get_routing(service: str) -> List[int]:
     ids = SERVICE_ROUTING.get(service, STAFF_IDS)
@@ -232,11 +259,19 @@ def kb_cancel():
 
 # ── Надсилання повідомлень ────────────────────────────────────
 
-async def notify_staff(bot, service: str, message: str):
+async def notify_staff(bot, service: str, message: str, client_id: int = None):
     recipients = get_routing(service)
+    # Кнопка "Відповісти клієнту" якщо є client_id
+    kb = None
+    if client_id:
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                'Відповісти клієнту',
+                callback_data='reply_{}'.format(client_id))
+        ]])
     for uid in recipients:
         try:
-            await bot.send_message(chat_id=uid, text=message)
+            await bot.send_message(chat_id=uid, text=message, reply_markup=kb)
         except Exception as e:
             logger.error('notify_staff {}: {}'.format(uid, e))
 
@@ -346,7 +381,7 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             '🕐 {}'
         ).format(rid, cname, car, sto['name'], sto['address'], service, wish, now_str())
 
-        await notify_staff(ctx.bot, service, msg)
+        await notify_staff(ctx.bot, service, msg, client_id=uid)
 
         await update.message.reply_text(
             'Вашу заявку прийнято! ✅\n\n'
@@ -368,8 +403,9 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         car    = client['car']  if client else 'не вказано'
 
         fwd = '💬 Повідомлення від клієнта:\n👤 {} | 🚗 {}\n\n{}'.format(cname, car, text)
+        kb_reply = InlineKeyboardMarkup([[InlineKeyboardButton('Відповісти клієнту', callback_data='reply_{}'.format(uid))]])
         for mid in STAFF_IDS:
-            try: await ctx.bot.send_message(chat_id=mid, text=fwd)
+            try: await ctx.bot.send_message(chat_id=mid, text=fwd, reply_markup=kb_reply)
             except Exception as e: logger.error('fwd: {}'.format(e))
 
         await update.message.reply_text(
@@ -381,15 +417,15 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if ud.get('wait_reply_to'):
         client_id = ud.pop('wait_reply_to')
         try:
-            await ctx.bot.send_message(
-                chat_id=client_id,
-                text='💬 Відповідь від майстра СТО Farro:\n\n{}'.format(text))
-            await update.message.reply_text('Відповідь надіслано клієнту. ✅', reply_markup=kb_staff_main())
+            await update.message.reply_text('Обробляю відповідь...')
+            polished = polish_master_reply(text)
+            await ctx.bot.send_message(chat_id=client_id,
+                text='💬 Відповідь від майстра СТО Farro:\n\n' + polished)
+            info = 'Відповідь надіслано. ✅\n\nВаш текст: ' + text + '\n\nНадіслано клієнту: ' + polished
+            await update.message.reply_text(info, reply_markup=kb_staff_main())
         except Exception as e:
             await update.message.reply_text('Помилка: {}'.format(e), reply_markup=kb_staff_main())
         return
-
-    # ── Підтвердження запису майстром ─────────────────────────
     if ud.get('wait_confirm_id'):
         rid = text.strip().upper()
         ud.pop('wait_confirm_id')
@@ -543,6 +579,14 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # ── Панель мастера ────────────────────────────────────────
     if not is_staff(uid):
         await q.edit_message_text('Немає доступу.')
+        return
+
+    # ── Відповідь клієнту через бота ─────────────────────────
+    if data.startswith('reply_'):
+        client_id = int(data[6:])
+        ud['wait_reply_to'] = client_id
+        msg_txt = 'Напишіть відповідь клієнту. Клієнт отримає її від імені бота СТО Farro:'
+        await q.edit_message_text(msg_txt, reply_markup=kb_cancel())
         return
 
     if data == 's_new':
