@@ -21,309 +21,410 @@ STO_NAME       = os.environ.get('STO_NAME', 'Farro')
 OWNER_ID       = int(os.environ.get('OWNER_ID', '0'))
 MASTER_IDS     = [int(x.strip()) for x in os.environ.get('MASTER_IDS','').split(',') if x.strip()]
 
+# Все сотрудники = мастера + владелец
+STAFF_IDS = list(set(MASTER_IDS + ([OWNER_ID] if OWNER_ID else [])))
+
+# Два СТО
+STO_INFO = {
+    'sto': {
+        'name':     'СТО Farro',
+        'address':  'вул. Богдана Хмельницького 4а (лівий берег)',
+        'maps':     'https://maps.app.goo.gl/yzXq7rwV2sB9SkRj9',
+        'hours':    'ПН-ПТ 09:00-18:00',
+        'services': [
+            'ГБО',
+            'Розвал-сходження 3D',
+            'Автокондиціонери',
+            'Ремонт ходової',
+            'Зварювальні роботи',
+            'Двигуни',
+            'Пайка пластику',
+            'Інше',
+        ],
+    },
+    'body': {
+        'name':     'Кузовний сервіс Farro',
+        'address':  'вул. Павла Чубинського 2а',
+        'maps':     'https://maps.app.goo.gl/xe7u4vD1tvSg6buy6',
+        'hours':    'ПН-ПТ 09:00-18:00',
+        'services': [
+            'Рихтування авто',
+            'Покраска авто',
+            'Видалення вм\'ятин без покраски (PDR)',
+            'Інше',
+        ],
+    },
+}
+
+# Маршрутизація заявок: всі мастери поки = OWNER_ID
+# Пізніше можна налаштувати окремі ID для кожної послуги
+SERVICE_ROUTING: Dict[str, List[int]] = {
+    'ГБО':                             STAFF_IDS,
+    'Розвал-сходження 3D':             STAFF_IDS,
+    'Автокондиціонери':                STAFF_IDS,
+    'Ремонт ходової':                  STAFF_IDS,
+    'Зварювальні роботи':              STAFF_IDS,
+    'Двигуни':                         STAFF_IDS,
+    'Пайка пластику':                  STAFF_IDS,
+    'Рихтування авто':                 STAFF_IDS,
+    'Покраска авто':                   STAFF_IDS,
+    'Видалення вм\'ятин без покраски (PDR)': STAFF_IDS,
+    'Інше':                            STAFF_IDS,
+}
+
+def get_routing(service: str) -> List[int]:
+    ids = SERVICE_ROUTING.get(service, STAFF_IDS)
+    if OWNER_ID and OWNER_ID not in ids:
+        ids = ids + [OWNER_ID]
+    return list(set(ids))
+
+
+# ── Google Sheets ─────────────────────────────────────────────
+
 def open_sheet():
     d = json.loads(GOOGLE_CREDS)
-    scopes = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+    scopes = ['https://spreadsheets.google.com/feeds',
+              'https://www.googleapis.com/auth/drive']
     creds = Credentials.from_service_account_info(d, scopes=scopes)
     return gspread.authorize(creds).open_by_key(SPREADSHEET_ID)
 
-def get_ws(name):
+def get_ws(name: str):
     sp = open_sheet()
     for ws in sp.worksheets():
         if ws.title.lower() == name.lower():
             return ws
     return sp.sheet1
 
-def parse_num(v):
-    s = re.sub(r'[^\d]','',str(v or ''))
+def now_str() -> str:
+    return datetime.now(KYIV_TZ).strftime('%d.%m.%y %H:%M')
+
+def today_str() -> str:
+    return datetime.now(KYIV_TZ).strftime('%d.%m.%y')
+
+def parse_num(v) -> Optional[int]:
+    s = re.sub(r'[^\d]', '', str(v or ''))
     try: return int(s) if s else None
     except: return None
 
-def today_str():
-    return datetime.now(KYIV_TZ).strftime('%d.%m.%y')
+def is_staff(uid: int) -> bool:
+    return uid in STAFF_IDS
 
-def now_str():
-    return datetime.now(KYIV_TZ).strftime('%d.%m.%y %H:%M')
 
-def is_staff(uid):
-    return uid in MASTER_IDS or uid == OWNER_ID
+# ── Клієнти ──────────────────────────────────────────────────
+# Колонки: A=TgID, B=Ім'я, C=Телефон, D=Номер авто, E=Марка, F=Дата реєстрації
 
-STATUSES = {
-    'new':     '🆕 Принято',
-    'in_work': '🔧 В работе',
-    'ready':   '✅ Готово',
-    'issued':  '🚗 Выдано',
-}
-
-def status_label(s):
-    return STATUSES.get(s, s)
-
-def get_client(tg_id):
+def get_client(tg_id: int) -> Optional[Dict]:
     ws = get_ws('Клиенты')
     for row in ws.get_all_values()[1:]:
         if str(row[0]).strip() == str(tg_id):
             return {
                 'tg_id': row[0],
-                'name':  row[1] if len(row)>1 else '',
-                'phone': row[2] if len(row)>2 else '',
-                'car':   row[3] if len(row)>3 else '',
-                'model': row[4] if len(row)>4 else '',
+                'name':  row[1] if len(row) > 1 else '',
+                'phone': row[2] if len(row) > 2 else '',
+                'car':   row[3] if len(row) > 3 else '',
+                'model': row[4] if len(row) > 4 else '',
             }
     return None
 
-def find_client_by_car(car):
+def save_client(tg_id: int, name: str, phone: str, car: str, model: str):
+    ws   = get_ws('Клиенты')
+    rows = ws.get_all_values()
+    for i, row in enumerate(rows[1:], start=2):
+        if str(row[0]).strip() == str(tg_id):
+            ws.update('B{}:F{}'.format(i,i), [[name, phone, car.upper(), model, today_str()]])
+            return
+    ws.append_row([str(tg_id), name, phone, car.upper(), model, today_str()])
+
+def find_client_by_car(car: str) -> Optional[Dict]:
     ws = get_ws('Клиенты')
-    cc = car.upper().replace(' ','')
+    cc = car.upper().replace(' ', '')
     for row in ws.get_all_values()[1:]:
-        if len(row)>3 and cc in str(row[3]).upper().replace(' ',''):
-            return {'tg_id':row[0],'name':row[1],'car':row[3]}
+        if len(row) > 3 and cc in str(row[3]).upper().replace(' ', ''):
+            return {'tg_id': row[0], 'name': row[1], 'car': row[3]}
     return None
 
-def register_client(tg_id, name, phone, car, model):
-    get_ws('Клиенты').append_row([str(tg_id), name, phone, car.upper(), model, today_str()])
 
-def gen_order_id():
+# ── Заявки ───────────────────────────────────────────────────
+# Колонки: A=ID, B=Дата, C=TgID клієнта, D=Ім'я, E=Авто,
+#          F=СТО, G=Послуга, H=Побажання, I=Статус, J=Майстер
+
+def gen_request_id() -> str:
     rows = get_ws('Заказы').get_all_values()
     num  = len([r for r in rows[1:] if r and r[0]]) + 1
-    return 'ORD-{:04d}'.format(num)
+    return 'REQ-{:04d}'.format(num)
 
-def create_order(car, client_name, description, odo, master_name):
-    oid = gen_order_id()
-    get_ws('Заказы').append_row([oid, now_str(), car.upper(), client_name,
-                                  description, 'new', master_name, odo, '', ''])
-    return oid
+def save_request(tg_id: int, client_name: str, car: str,
+                 sto_key: str, service: str, wish: str) -> str:
+    rid = gen_request_id()
+    get_ws('Заказы').append_row([
+        rid, now_str(), str(tg_id), client_name,
+        car, STO_INFO[sto_key]['name'], service, wish, 'new', ''
+    ])
+    return rid
 
-def get_order(order_id):
-    for row in get_ws('Заказы').get_all_values()[1:]:
-        if str(row[0]).strip() == order_id:
-            return {
-                'id':          row[0],
-                'date':        row[1] if len(row)>1 else '',
-                'car':         row[2] if len(row)>2 else '',
-                'client':      row[3] if len(row)>3 else '',
-                'description': row[4] if len(row)>4 else '',
-                'status':      row[5] if len(row)>5 else 'new',
-                'master':      row[6] if len(row)>6 else '',
-                'odo':         row[7] if len(row)>7 else '',
-                'act_link':    row[8] if len(row)>8 else '',
-                'ready_time':  row[9] if len(row)>9 else '',
-            }
-    return None
-
-def update_order_status(order_id, status, extra=''):
-    ws = get_ws('Заказы')
-    for i, row in enumerate(ws.get_all_values()[1:], start=2):
-        if str(row[0]).strip() == order_id:
-            ws.update('F{}'.format(i), [[status]])
-            if status == 'ready':
-                ws.update('J{}'.format(i), [[now_str()]])
-            if extra:
-                ws.update('I{}'.format(i), [[extra]])
-            return
-
-def get_active_orders():
+def get_requests_by_client(tg_id: int) -> List[Dict]:
     result = []
     for row in get_ws('Заказы').get_all_values()[1:]:
-        if len(row)>5 and row[5] not in ('issued',''):
+        if len(row) > 2 and str(row[2]).strip() == str(tg_id):
             result.append({
-                'id': row[0], 'date': row[1], 'car': row[2],
-                'client': row[3], 'description': row[4],
-                'status': row[5], 'master': row[6] if len(row)>6 else '',
+                'id':      row[0], 'date': row[1],
+                'sto':     row[5] if len(row) > 5 else '',
+                'service': row[6] if len(row) > 6 else '',
+                'wish':    row[7] if len(row) > 7 else '',
+                'status':  row[8] if len(row) > 8 else '',
             })
-    return result
+    return result[-5:]
 
-def get_orders_by_car(car):
-    cc = car.upper().replace(' ','')
+def get_orders_by_car(car: str) -> List[Dict]:
+    cc = car.upper().replace(' ', '')
     result = []
     for row in get_ws('Заказы').get_all_values()[1:]:
-        if len(row)>2 and cc in str(row[2]).upper().replace(' ',''):
+        if len(row) > 4 and cc in str(row[4]).upper().replace(' ', ''):
             result.append({
-                'id': row[0], 'date': row[1], 'car': row[2],
-                'description': row[4] if len(row)>4 else '',
-                'status':      row[5] if len(row)>5 else '',
-                'act_link':    row[8] if len(row)>8 else '',
+                'id':      row[0], 'date': row[1],
+                'service': row[6] if len(row) > 6 else '',
+                'status':  row[8] if len(row) > 8 else '',
             })
-    return result[-10:]
+    return result[-5:]
 
-def get_to_history(car):
-    cc = car.upper().replace(' ','')
-    for row in get_ws('История_ТО').get_all_values()[1:]:
-        if row and cc in str(row[0]).upper().replace(' ',''):
-            return {
-                'car':      row[0],
-                'oil_date': row[1] if len(row)>1 else '',
-                'oil_odo':  parse_num(row[2]) if len(row)>2 else None,
-                'grm_date': row[3] if len(row)>3 else '',
-                'grm_odo':  parse_num(row[4]) if len(row)>4 else None,
-            }
-    return None
 
-def calc_oil(car, odo):
-    h = get_to_history(car)
-    if not h or not h['oil_odo']:
-        return 'Данных о замене масла нет. Обратитесь на СТО.'
-    rem = 10000 - (odo - h['oil_odo'])
-    if rem <= 0:
-        return 'Масло просрочено на {} км! Срочно на замену.'.format(abs(rem))
-    if rem <= 1000:
-        return 'До замены масла: {} км. Запишитесь на ТО.'.format(rem)
-    return 'До замены масла: {} км (замена: {})'.format(rem, h['oil_date'])
+# ── Клавіатури ───────────────────────────────────────────────
 
-def calc_grm(car, odo):
-    h = get_to_history(car)
-    if not h or not h['grm_odo']:
-        return 'Данных о замене ГРМ нет. Уточните у мастера.'
-    rem = 60000 - (odo - h['grm_odo'])
-    if rem <= 0:
-        return 'ГРМ просрочен на {} км!'.format(abs(rem))
-    if rem <= 2000:
-        return 'До замены ГРМ: {} км.'.format(rem)
-    return 'До замены ГРМ: {} км (замена: {})'.format(rem, h['grm_date'])
-
-def kb_client():
+def kb_welcome():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('📊 Статус моего авто',   callback_data='c_status')],
-        [InlineKeyboardButton('🛢 Когда менять масло?', callback_data='c_oil')],
-        [InlineKeyboardButton('📋 История работ',       callback_data='c_history')],
-        [InlineKeyboardButton('📩 Написать мастеру',    callback_data='c_contact')],
+        [InlineKeyboardButton('🔍 Дізнатися статус мого авто', callback_data='w_status')],
+        [InlineKeyboardButton('📝 Записатися на послугу',      callback_data='w_new')],
     ])
 
-def kb_master():
+def kb_main_client():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('➕ Принять авто',         callback_data='m_new')],
-        [InlineKeyboardButton('📋 Активные заказы',     callback_data='m_orders')],
-        [InlineKeyboardButton('✅ Отметить готово',      callback_data='m_ready')],
-        [InlineKeyboardButton('📊 Заказы сегодня',      callback_data='m_today')],
+        [InlineKeyboardButton('📊 Статус мого авто',      callback_data='c_status')],
+        [InlineKeyboardButton('📝 Записатися на послугу', callback_data='w_new')],
+        [InlineKeyboardButton('📋 Мої заявки',            callback_data='c_requests')],
+        [InlineKeyboardButton('💬 Написати майстру',      callback_data='c_contact')],
     ])
 
-def kb_owner():
+def kb_choose_sto():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('📋 Все активные заказы', callback_data='m_orders')],
-        [InlineKeyboardButton('📊 Статистика',          callback_data='o_stats')],
-        [InlineKeyboardButton('🔧 Режим мастера',       callback_data='m_new')],
+        [InlineKeyboardButton('🔧 СТО (ГБО, Ходова, Кондиціонери...)',   callback_data='sto_sto')],
+        [InlineKeyboardButton('🚗 Кузовний сервіс (Рихтування, Покраска, PDR)', callback_data='sto_body')],
+    ])
+
+def kb_services(sto_key: str):
+    services = STO_INFO[sto_key]['services']
+    buttons  = []
+    for svc in services:
+        buttons.append([InlineKeyboardButton(svc, callback_data='svc_{}_{}'.format(sto_key, svc[:30]))])
+    return InlineKeyboardMarkup(buttons)
+
+def kb_staff_main():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton('📋 Нові заявки',              callback_data='s_new')],
+        [InlineKeyboardButton('✅ Підтвердити запис',        callback_data='s_confirm')],
+        [InlineKeyboardButton('🔧 Авто в роботі',           callback_data='s_inwork')],
+        [InlineKeyboardButton('🏁 Авто готове',             callback_data='s_ready')],
+        [InlineKeyboardButton('📊 Всі активні',             callback_data='s_all')],
     ])
 
 def kb_cancel():
-    return InlineKeyboardMarkup([[InlineKeyboardButton('❌ Отмена', callback_data='cancel')]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton('❌ Скасувати', callback_data='cancel')]])
+
+
+# ── Надсилання повідомлень ────────────────────────────────────
+
+async def notify_staff(bot, service: str, message: str):
+    recipients = get_routing(service)
+    for uid in recipients:
+        try:
+            await bot.send_message(chat_id=uid, text=message)
+        except Exception as e:
+            logger.error('notify_staff {}: {}'.format(uid, e))
+
+async def notify_owner(bot, message: str):
+    if OWNER_ID:
+        try:
+            await bot.send_message(chat_id=OWNER_ID, text=message)
+        except Exception as e:
+            logger.error('notify_owner: {}'.format(e))
+
+
+# ── Handlers ─────────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
-    name = update.effective_user.first_name or 'Клиент'
+    name = update.effective_user.first_name or 'Клієнт'
     ctx.user_data.clear()
-    if uid == OWNER_ID:
+
+    if is_staff(uid):
         await update.message.reply_text(
-            'Привет, {}! ID: {}\nРежим владельца — СТО {}.'.format(name, uid, STO_NAME),
-            reply_markup=kb_owner())
-    elif uid in MASTER_IDS:
+            'Привіт, {}!\nID: {}\n\nПанель управління СТО Farro 🔥'.format(name, uid),
+            reply_markup=kb_staff_main())
+        return
+
+    client = get_client(uid)
+    if client:
         await update.message.reply_text(
-            'Привет, {}! ID: {}\nРежим мастера — СТО {}.'.format(name, uid, STO_NAME),
-            reply_markup=kb_master())
+            'З поверненням, {}! 👋\n\nЧим можу допомогти?'.format(client['name']),
+            reply_markup=kb_main_client())
     else:
-        client = get_client(uid)
-        if client and client['car']:
-            await update.message.reply_text(
-                'Привет, {}!\nВаш автомобиль: {}\nЧем могу помочь?'.format(
-                    client['name'], client['car']),
-                reply_markup=kb_client())
-        else:
-            ctx.user_data['reg_step'] = 'name'
-            await update.message.reply_text(
-                'Добро пожаловать в СТО {}!\nКак вас зовут?'.format(STO_NAME))
+        await update.message.reply_text(
+            'Вітаємо в СТО Farro 🔥\n\nВи вже здавали до нас авто?',
+            reply_markup=kb_welcome())
 
 async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
     text = (update.message.text or '').strip()
     ud   = ctx.user_data
 
+    # ── Реєстрація ────────────────────────────────────────────
     if ud.get('reg_step') == 'name':
-        ud['reg_name'] = text; ud['reg_step'] = 'phone'
-        await update.message.reply_text('Приятно, {}! Ваш номер телефона?'.format(text))
+        ud['reg_name'] = text
+        ud['reg_step'] = 'phone'
+        await update.message.reply_text('Ваш номер телефону?')
         return
+
     if ud.get('reg_step') == 'phone':
-        ud['reg_phone'] = text; ud['reg_step'] = 'car'
-        await update.message.reply_text('Номер вашего авто? (например АА1234ВВ)')
+        ud['reg_phone'] = text
+        ud['reg_step']  = 'car'
+        await update.message.reply_text('Номер вашого авто? (наприклад АА1234ВВ)\nЯкщо авто немає — напишіть прочерк -')
         return
+
     if ud.get('reg_step') == 'car':
-        ud['reg_car'] = text.upper(); ud['reg_step'] = 'model'
-        await update.message.reply_text('Марка и модель? (например Toyota Camry)')
+        ud['reg_car']  = text.upper() if text != '-' else ''
+        ud['reg_step'] = 'model'
+        await update.message.reply_text('Марка і модель? (наприклад Toyota Camry)\nЯкщо не знаєте — напишіть прочерк -')
         return
+
     if ud.get('reg_step') == 'model':
-        register_client(uid, ud['reg_name'], ud['reg_phone'], ud['reg_car'], text)
-        car = ud['reg_car']; ud.clear()
+        save_client(uid, ud['reg_name'], ud['reg_phone'], ud.get('reg_car',''), text if text != '-' else '')
+        name = ud['reg_name']
+        ud.clear()
         await update.message.reply_text(
-            'Вы зарегистрированы!\nАвто: {}\nЧем могу помочь?'.format(car),
-            reply_markup=kb_client())
+            'Дякуємо, {}! Ви зареєстровані. 👍\n\nЧим можу допомогти?'.format(name),
+            reply_markup=kb_main_client())
         return
 
-    if ud.get('wait_odo'):
-        car = ud.pop('wait_odo')
-        odo = parse_num(text)
-        if not odo:
-            await update.message.reply_text('Введите пробег цифрами, например: 125000')
-            ud['wait_odo'] = car; return
-        await update.message.reply_text(
-            '🚗 {}\n\n🛢 Масло:\n{}\n\n⚙️ ГРМ:\n{}'.format(
-                car, calc_oil(car,odo), calc_grm(car,odo)),
-            reply_markup=kb_client())
-        return
-
-    if ud.get('order_step'):
-        step = ud['order_step']
-        if step == 'car':
-            ud['o_car'] = text.upper(); ud['order_step'] = 'client'
-            await update.message.reply_text('Имя клиента:'); return
-        if step == 'client':
-            ud['o_client'] = text; ud['order_step'] = 'desc'
-            await update.message.reply_text('Описание работ:'); return
-        if step == 'desc':
-            ud['o_desc'] = text; ud['order_step'] = 'odo'
-            await update.message.reply_text('Одометр (пробег):'); return
-        if step == 'odo':
-            master = update.effective_user.first_name or 'Мастер'
-            oid    = create_order(ud['o_car'], ud['o_client'], ud['o_desc'], text, master)
-            car = ud['o_car']; client = ud['o_client']; desc = ud['o_desc']
-            ud.clear()
+    # ── Пошук авто для статусу ────────────────────────────────
+    if ud.get('wait_car_status'):
+        ud.pop('wait_car_status')
+        orders = get_orders_by_car(text)
+        if not orders:
             await update.message.reply_text(
-                'Заказ создан!\n🔖 {}\n🚗 {}\n👤 {}\n📋 {}'.format(oid, car, client, desc),
-                reply_markup=kb_master())
+                'Авто {} не знайдено в наших записах.\n\nХочете записатися на послугу?'.format(text.upper()),
+                reply_markup=kb_main_client())
             return
-
-    if ud.get('wait_ready_id'):
-        ud.pop('wait_ready_id')
-        order = get_order(text.strip().upper())
-        if not order:
-            await update.message.reply_text('Заказ не найден. Проверьте номер.')
-            return
-        update_order_status(order['id'], 'ready')
-        await update.message.reply_text(
-            'Заказ {} готов!\n🚗 {} — {}'.format(order['id'], order['car'], order['client']),
-            reply_markup=kb_master())
-        cl = find_client_by_car(order['car'])
-        if cl and cl['tg_id']:
-            try:
-                await ctx.bot.send_message(
-                    chat_id=int(cl['tg_id']),
-                    text='Ваш автомобиль {} готов!\nРаботы: {}\n\nЖдём вас в СТО {}!'.format(
-                        order['car'], order['description'], STO_NAME))
-            except Exception as e: logger.error('notify: {}'.format(e))
+        lines = ['📋 Статус авто {}:\n'.format(text.upper())]
+        status_icons = {'new':'🆕','confirmed':'✅','in_work':'🔧','ready':'🏁','issued':'🚗'}
+        for o in reversed(orders):
+            icon = status_icons.get(o['status'], '📌')
+            lines.append('{} {} | {} | {}'.format(icon, o['date'], o['service'], o['status']))
+        await update.message.reply_text('\n'.join(lines), reply_markup=kb_main_client())
         return
 
-    if ud.get('wait_msg'):
-        ud.pop('wait_msg')
-        cl = get_client(uid)
-        cn = cl['name'] if cl else str(uid)
-        cc = cl['car']  if cl else 'неизв.'
-        for mid in MASTER_IDS:
-            try:
-                await ctx.bot.send_message(chat_id=mid,
-                    text='Сообщение от клиента:\n👤 {} | 🚗 {}\n\n{}'.format(cn, cc, text))
+    # ── Побажання клієнта при записі ─────────────────────────
+    if ud.get('wait_wish'):
+        sto_key = ud.get('selected_sto')
+        service = ud.get('selected_service')
+        wish    = text
+        ud.pop('wait_wish', None)
+
+        client  = get_client(uid)
+        cname   = client['name'] if client else str(uid)
+        car     = client['car']  if client else 'не вказано'
+
+        rid = save_request(uid, cname, car, sto_key, service, wish)
+
+        sto = STO_INFO[sto_key]
+        msg = (
+            '🔔 НОВА ЗАЯВКА {}\n\n'
+            '👤 Клієнт: {}\n'
+            '🚗 Авто: {}\n'
+            '🏠 СТО: {}\n'
+            '📍 {}\n'
+            '🔧 Послуга: {}\n'
+            '💬 Побажання: {}\n'
+            '🕐 {}'
+        ).format(rid, cname, car, sto['name'], sto['address'], service, wish, now_str())
+
+        await notify_staff(ctx.bot, service, msg)
+
+        await update.message.reply_text(
+            'Вашу заявку прийнято! ✅\n\n'
+            '🔖 Номер заявки: {}\n'
+            '🔧 Послуга: {}\n'
+            '🏠 {}\n'
+            '📍 {}\n'
+            '🕐 {}\n\n'
+            'Наш майстер звʼяжеться з вами найближчим часом для підтвердження.'.format(
+                rid, service, sto['name'], sto['address'], sto['hours']),
+            reply_markup=kb_main_client())
+        return
+
+    # ── Повідомлення майстру від клієнта ─────────────────────
+    if ud.get('wait_client_msg'):
+        ud.pop('wait_client_msg')
+        client = get_client(uid)
+        cname  = client['name'] if client else str(uid)
+        car    = client['car']  if client else 'не вказано'
+
+        fwd = '💬 Повідомлення від клієнта:\n👤 {} | 🚗 {}\n\n{}'.format(cname, car, text)
+        for mid in STAFF_IDS:
+            try: await ctx.bot.send_message(chat_id=mid, text=fwd)
             except Exception as e: logger.error('fwd: {}'.format(e))
+
         await update.message.reply_text(
-            'Сообщение отправлено мастеру.', reply_markup=kb_client())
+            'Повідомлення надіслано майстру. ✅\nОчікуйте відповіді.',
+            reply_markup=kb_main_client())
         return
 
-    kb = kb_master() if is_staff(uid) else kb_client()
-    await update.message.reply_text('Выберите действие:', reply_markup=kb)
+    # ── Відповідь майстра клієнту ─────────────────────────────
+    if ud.get('wait_reply_to'):
+        client_id = ud.pop('wait_reply_to')
+        try:
+            await ctx.bot.send_message(
+                chat_id=client_id,
+                text='💬 Відповідь від майстра СТО Farro:\n\n{}'.format(text))
+            await update.message.reply_text('Відповідь надіслано клієнту. ✅', reply_markup=kb_staff_main())
+        except Exception as e:
+            await update.message.reply_text('Помилка: {}'.format(e), reply_markup=kb_staff_main())
+        return
+
+    # ── Підтвердження запису майстром ─────────────────────────
+    if ud.get('wait_confirm_id'):
+        rid = text.strip().upper()
+        ud.pop('wait_confirm_id')
+        ws   = get_ws('Заказы')
+        rows = ws.get_all_values()
+        found = False
+        for i, row in enumerate(rows[1:], start=2):
+            if str(row[0]).strip() == rid:
+                ws.update('I{}'.format(i), [['confirmed']])
+                client_id = str(row[2]).strip() if len(row) > 2 else None
+                service   = row[6] if len(row) > 6 else ''
+                found = True
+                if client_id:
+                    try:
+                        await ctx.bot.send_message(
+                            chat_id=int(client_id),
+                            text='✅ Ваш запис підтверджено!\n\n'
+                                 '🔖 Заявка: {}\n'
+                                 '🔧 Послуга: {}\n\n'
+                                 'Чекаємо вас! СТО Farro 🔥'.format(rid, service))
+                    except Exception as e: logger.error('confirm notify: {}'.format(e))
+                break
+        if found:
+            await update.message.reply_text('Запис {} підтверджено. Клієнта повідомлено. ✅'.format(rid),
+                                            reply_markup=kb_staff_main())
+        else:
+            await update.message.reply_text('Заявку {} не знайдено.'.format(rid), reply_markup=kb_staff_main())
+        return
+
+    # ── За замовчуванням ──────────────────────────────────────
+    if is_staff(uid):
+        await update.message.reply_text('Оберіть дію:', reply_markup=kb_staff_main())
+    else:
+        await update.message.reply_text('Оберіть дію:', reply_markup=kb_main_client())
+
 
 async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q    = update.callback_query
@@ -334,130 +435,228 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if data == 'cancel':
         ud.clear()
-        kb = kb_master() if is_staff(uid) else kb_client()
-        await q.edit_message_text('Отменено.', reply_markup=kb)
+        kb = kb_staff_main() if is_staff(uid) else kb_main_client()
+        await q.edit_message_text('Скасовано.', reply_markup=kb)
         return
 
-    if data == 'c_status':
-        cl = get_client(uid)
-        if not cl or not cl['car']:
-            await q.edit_message_text('Сначала зарегистрируйтесь — /start')
-            return
-        orders = get_orders_by_car(cl['car'])
-        active = [o for o in orders if o['status'] not in ('issued','')]
-        if not active:
-            await q.edit_message_text(
-                '🚗 {}\n\nАктивных заказов нет.\nВсего работ в истории: {}'.format(
-                    cl['car'], len(orders)),
-                reply_markup=kb_client())
-            return
-        o   = active[-1]
-        txt = '🚗 {}\n📊 {}\n🔖 {}\n📋 {}\n📅 {}'.format(
-            cl['car'], status_label(o['status']), o['id'], o['description'], o['date'])
-        if o.get('act_link'):
-            txt += '\n📄 Акт: {}'.format(o['act_link'])
-        await q.edit_message_text(txt, reply_markup=kb_client())
-        return
-
-    if data == 'c_oil':
-        cl = get_client(uid)
-        if not cl or not cl['car']:
-            await q.edit_message_text('Сначала зарегистрируйтесь — /start')
-            return
-        ud['wait_odo'] = cl['car']
+    # ── Вітальне меню ─────────────────────────────────────────
+    if data == 'w_status':
+        ud['wait_car_status'] = True
         await q.edit_message_text(
-            '🚗 {}\nВведите текущий пробег (одометр) в км:'.format(cl['car']),
+            'Введіть номер вашого авто (наприклад АА1234ВВ):',
             reply_markup=kb_cancel())
         return
 
-    if data == 'c_history':
-        cl = get_client(uid)
-        if not cl or not cl['car']:
-            await q.edit_message_text('Сначала зарегистрируйтесь — /start')
+    if data == 'w_new':
+        client = get_client(uid)
+        if not client:
+            ud['reg_step'] = 'name'
+            await q.edit_message_text(
+                'Для запису потрібна реєстрація.\nЯк вас звати?',
+                reply_markup=kb_cancel())
+        else:
+            await q.edit_message_text(
+                'Оберіть СТО:',
+                reply_markup=kb_choose_sto())
+        return
+
+    # ── Вибір СТО ─────────────────────────────────────────────
+    if data.startswith('sto_'):
+        sto_key = data[4:]
+        if sto_key not in STO_INFO:
+            await q.edit_message_text('Невідоме СТО.')
             return
-        orders = get_orders_by_car(cl['car'])
+        ud['selected_sto'] = sto_key
+        sto = STO_INFO[sto_key]
+        await q.edit_message_text(
+            '{}\n📍 {}\n🗺 {}\n🕐 {}\n\nОберіть послугу:'.format(
+                sto['name'], sto['address'], sto['maps'], sto['hours']),
+            reply_markup=kb_services(sto_key))
+        return
+
+    # ── Вибір послуги ─────────────────────────────────────────
+    if data.startswith('svc_'):
+        parts   = data[4:].split('_', 1)
+        sto_key = parts[0]
+        service = parts[1] if len(parts) > 1 else 'Інше'
+
+        # Знаходимо повну назву послуги
+        for svc in STO_INFO.get(sto_key, {}).get('services', []):
+            if svc[:30] == service:
+                service = svc
+                break
+
+        ud['selected_sto']     = sto_key
+        ud['selected_service'] = service
+        ud['wait_wish']        = True
+        await q.edit_message_text(
+            'Послуга: {}\n\nОпишіть коротко що сталось або що потрібно зробити.\nТакож вкажіть зручний час для запису:'.format(service),
+            reply_markup=kb_cancel())
+        return
+
+    # ── Клієнтське меню ───────────────────────────────────────
+    if data == 'c_status':
+        client = get_client(uid)
+        if not client:
+            await q.edit_message_text('Спочатку зареєструйтесь — /start')
+            return
+        if not client['car']:
+            ud['wait_car_status'] = True
+            await q.edit_message_text(
+                'Введіть номер авто для перевірки:',
+                reply_markup=kb_cancel())
+            return
+        orders = get_orders_by_car(client['car'])
         if not orders:
-            await q.edit_message_text('История работ пуста.', reply_markup=kb_client())
+            await q.edit_message_text(
+                'Активних заявок для {} не знайдено.'.format(client['car']),
+                reply_markup=kb_main_client())
             return
-        lines = ['📋 История — {}\n'.format(cl['car'])]
+        status_icons = {'new':'🆕','confirmed':'✅','in_work':'🔧','ready':'🏁','issued':'🚗'}
+        lines = ['📋 Статус авто {}:\n'.format(client['car'])]
         for o in reversed(orders):
-            ln = '• {} — {}'.format(o['date'], o['description'])
-            if o.get('act_link'):
-                ln += ' (акт: {})'.format(o['act_link'])
-            lines.append(ln)
-        await q.edit_message_text('\n'.join(lines), reply_markup=kb_client())
+            icon = status_icons.get(o['status'], '📌')
+            lines.append('{} {} | {}'.format(icon, o['date'], o['service']))
+        await q.edit_message_text('\n'.join(lines), reply_markup=kb_main_client())
+        return
+
+    if data == 'c_requests':
+        requests = get_requests_by_client(uid)
+        if not requests:
+            await q.edit_message_text('Заявок не знайдено.', reply_markup=kb_main_client())
+            return
+        lines = ['📋 Ваші останні заявки:\n']
+        status_icons = {'new':'🆕','confirmed':'✅','in_work':'🔧','ready':'🏁','issued':'🚗'}
+        for r in reversed(requests):
+            icon = status_icons.get(r['status'], '📌')
+            lines.append('{} {} | {} | {}'.format(icon, r['date'], r['service'], r['sto']))
+        await q.edit_message_text('\n'.join(lines), reply_markup=kb_main_client())
         return
 
     if data == 'c_contact':
-        ud['wait_msg'] = True
+        ud['wait_client_msg'] = True
         await q.edit_message_text(
-            'Напишите ваш вопрос — мастер ответит в ближайшее время:',
+            'Напишіть ваше питання — майстер відповість найближчим часом:',
             reply_markup=kb_cancel())
         return
 
-    if data == 'm_new':
-        if not is_staff(uid):
-            await q.edit_message_text('Нет доступа.')
-            return
-        ud['order_step'] = 'car'
-        await q.edit_message_text('Новый заказ\n\nНомер авто клиента:', reply_markup=kb_cancel())
+    # ── Панель мастера ────────────────────────────────────────
+    if not is_staff(uid):
+        await q.edit_message_text('Немає доступу.')
         return
 
-    if data == 'm_orders':
-        if not is_staff(uid):
-            await q.edit_message_text('Нет доступа.')
+    if data == 's_new':
+        ws    = get_ws('Заказы')
+        rows  = ws.get_all_values()
+        new_r = [r for r in rows[1:] if len(r) > 8 and r[8] == 'new']
+        if not new_r:
+            await q.edit_message_text('Нових заявок немає.', reply_markup=kb_staff_main())
             return
-        orders = get_active_orders()
-        if not orders:
-            await q.edit_message_text('Активных заказов нет.', reply_markup=kb_master())
-            return
-        lines = ['📋 Активные заказы: {}\n'.format(len(orders))]
-        for o in orders:
-            lines.append('🔖 {} | 🚗 {} | {}\n   👤 {}'.format(
-                o['id'], o['car'], status_label(o['status']), o['client']))
-        await q.edit_message_text('\n'.join(lines), reply_markup=kb_master())
+        lines = ['🆕 Нові заявки: {}\n'.format(len(new_r))]
+        for r in new_r:
+            lines.append('🔖 {} | {} | {} | {}'.format(r[0], r[3], r[6], r[1]))
+        await q.edit_message_text('\n'.join(lines), reply_markup=kb_staff_main())
         return
 
-    if data == 'm_ready':
-        if not is_staff(uid):
-            await q.edit_message_text('Нет доступа.')
-            return
-        ud['wait_ready_id'] = True
-        await q.edit_message_text('Введите номер заказа (ORD-0001):', reply_markup=kb_cancel())
-        return
-
-    if data == 'm_today':
-        if not is_staff(uid):
-            await q.edit_message_text('Нет доступа.')
-            return
-        orders  = get_active_orders()
-        today   = today_str()
-        torders = [o for o in orders if today in o.get('date','')]
-        lines   = ['📊 Сегодня {}: {} заказов\n'.format(today, len(torders))]
-        for o in torders:
-            lines.append('• {} | {} | {}'.format(o['id'], o['car'], status_label(o['status'])))
+    if data == 's_confirm':
+        ud['wait_confirm_id'] = True
         await q.edit_message_text(
-            '\n'.join(lines) or 'Заказов сегодня нет.', reply_markup=kb_master())
+            'Введіть номер заявки для підтвердження (наприклад REQ-0001):',
+            reply_markup=kb_cancel())
         return
 
-    if data == 'o_stats':
-        if uid != OWNER_ID:
-            await q.edit_message_text('Нет доступа.')
+    if data == 's_inwork':
+        ws   = get_ws('Заказы')
+        rows = ws.get_all_values()
+        active = [r for r in rows[1:] if len(r) > 8 and r[8] in ('confirmed', 'in_work')]
+        if not active:
+            await q.edit_message_text('Немає авто в роботі.', reply_markup=kb_staff_main())
             return
-        rows   = get_ws('Заказы').get_all_values()
-        total  = len([r for r in rows[1:] if r and r[0]])
-        active = len([r for r in rows[1:] if len(r)>5 and r[5] not in ('issued','')])
-        issued = len([r for r in rows[1:] if len(r)>5 and r[5]=='issued'])
-        await q.edit_message_text(
-            'Статистика СТО {}\n\nВсего заказов: {}\nАктивных: {}\nВыдано: {}'.format(
-                STO_NAME, total, active, issued),
-            reply_markup=kb_owner())
+        lines = ['🔧 В роботі: {}\n'.format(len(active))]
+        for r in active:
+            lines.append('🔖 {} | {} | {}'.format(r[0], r[3], r[6]))
+        # Кнопки для кожної заявки
+        buttons = []
+        for r in active:
+            buttons.append([InlineKeyboardButton(
+                'Готово: {} — {}'.format(r[0], r[3]),
+                callback_data='ready_{}'.format(r[0]))])
+        buttons.append([InlineKeyboardButton('⬅️ Назад', callback_data='s_all')])
+        await q.edit_message_text('\n'.join(lines), reply_markup=InlineKeyboardMarkup(buttons))
         return
+
+    if data == 's_ready':
+        ws   = get_ws('Заказы')
+        rows = ws.get_all_values()
+        active = [r for r in rows[1:] if len(r) > 8 and r[8] in ('confirmed', 'in_work', 'new')]
+        buttons = []
+        for r in active[:10]:
+            buttons.append([InlineKeyboardButton(
+                '{} — {} | {}'.format(r[0], r[3], r[6]),
+                callback_data='ready_{}'.format(r[0]))])
+        buttons.append([InlineKeyboardButton('❌ Скасувати', callback_data='cancel')])
+        await q.edit_message_text(
+            'Оберіть заявку яка готова:',
+            reply_markup=InlineKeyboardMarkup(buttons))
+        return
+
+    if data.startswith('ready_'):
+        rid  = data[6:]
+        ws   = get_ws('Заказы')
+        rows = ws.get_all_values()
+        for i, row in enumerate(rows[1:], start=2):
+            if str(row[0]).strip() == rid:
+                ws.update('I{}'.format(i), [['ready']])
+                client_id = str(row[2]).strip() if len(row) > 2 else None
+                cname     = row[3] if len(row) > 3 else ''
+                car       = row[4] if len(row) > 4 else ''
+                service   = row[6] if len(row) > 6 else ''
+                sto_name  = row[5] if len(row) > 5 else ''
+                if client_id:
+                    try:
+                        await ctx.bot.send_message(
+                            chat_id=int(client_id),
+                            text='🏁 Ваш автомобіль готовий!\n\n'
+                                 '🚗 Авто: {}\n'
+                                 '🔧 Послуга: {}\n'
+                                 '🏠 {}\n\n'
+                                 'Чекаємо вас! СТО Farro 🔥'.format(car, service, sto_name))
+                    except Exception as e: logger.error('ready notify: {}'.format(e))
+                await q.edit_message_text(
+                    'Заявка {} відмічена як готова. ✅\nКлієнта {} повідомлено.'.format(rid, cname),
+                    reply_markup=kb_staff_main())
+                return
+        await q.edit_message_text('Заявку не знайдено.', reply_markup=kb_staff_main())
+        return
+
+    if data == 's_all':
+        ws    = get_ws('Заказы')
+        rows  = ws.get_all_values()
+        active = [r for r in rows[1:] if len(r) > 8 and r[8] not in ('issued', '')]
+        if not active:
+            await q.edit_message_text('Активних заявок немає.', reply_markup=kb_staff_main())
+            return
+        status_icons = {'new':'🆕','confirmed':'✅','in_work':'🔧','ready':'🏁'}
+        lines = ['📋 Всі активні заявки: {}\n'.format(len(active))]
+        for r in active:
+            icon = status_icons.get(r[8], '📌')
+            lines.append('{} {} | {} | {}'.format(icon, r[0], r[3], r[6]))
+        await q.edit_message_text('\n'.join(lines), reply_markup=kb_staff_main())
+        return
+
+
+async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if is_staff(uid):
+        await update.message.reply_text('Панель управління:', reply_markup=kb_staff_main())
+    else:
+        await update.message.reply_text('Меню:', reply_markup=kb_main_client())
+
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler('start', cmd_start))
-    app.add_handler(CommandHandler('menu',  cmd_start))
+    app.add_handler(CommandHandler('menu',  cmd_menu))
     app.add_handler(CallbackQueryHandler(handle_cb))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
     logger.info('СТО бот {} запущен!'.format(STO_NAME))
