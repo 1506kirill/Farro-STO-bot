@@ -26,329 +26,156 @@ CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY')
 STAFF_IDS     = list(set(MASTER_IDS + ([OWNER_ID] if OWNER_ID else [])))
 claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
 
-# 26 машин автопарку (короткi ID)
-FLEET_CARS = {
-    '0418': 'АЕ0418ОР', '2993': 'АЕ2993РI', '7935': 'AE7935PI',
-    '3021': 'КА3021ЕО', '9489': 'КА9489ЕР', '7121': 'АЕ7121ТА',
-    '8204': 'АЕ8204ТВ', '2548': 'AE2548TB', '9245': 'АЕ9245ТО',
-    '0736': 'AE0736PK', '4715': 'AE4715TH', '6514': 'АЕ6514ТС',
-    '4895': 'KA4895HE', '6843': 'KA6843HB', '5308': 'АЕ5308ТЕ',
-    '1875': 'BI1875HO', '0665': 'KA0665IH', '0349': 'KA0349HO',
-    '9854': 'BC9854PM', '8391': 'АЕ8391ТМ', '4553': 'AE4553XB',
-    '8730': 'KA8730IX', '5725': 'AE5725OO', '6584': 'СА6584КА',
-    '3531': 'AI3531PH', '1457': 'AI1457MM',
-}
+# Послуги з посиланнями
+SERVICES_BODY = [
+    ('Рихтування авто',                  'https://farro.ua/rihtovka-avto/'),
+    ('Покраска авто',                     'https://farro.ua/pokraska-avto/'),
+    ('Видалення вмятин без покраски PDR', 'https://farro.ua/rihtovka-avto/'),
+]
 
-# Словник розпiзнавання назв авто з опечатками
-CAR_NAMES = {
-    # Toyota
-    'камри':    'Toyota Camry',   'кемри':  'Toyota Camry',
-    'камрi':    'Toyota Camry',   'кемрi':  'Toyota Camry',
-    'camry':  'Toyota Camry',   'кемра':  'Toyota Camry',
-    'прадо':    'Toyota Land Cruiser Prado',
-    'прадiк':   'Toyota Land Cruiser Prado',
-    'прадик':   'Toyota Land Cruiser Prado',
-    'prado':    'Toyota Land Cruiser Prado',
-    'rav4':     'Toyota RAV4',    'рав4':   'Toyota RAV4',
-    'рав':      'Toyota RAV4',    'рафiк':  'Toyota RAV4',
-    'крузак':   'Toyota Land Cruiser',
-    'крузер':   'Toyota Land Cruiser',
-    'хайлендер':'Toyota Highlander',
-    'корола':   'Toyota Corolla', 'corolla':'Toyota Corolla',
-    'авенсiс':  'Toyota Avensis',
-    'версо':    'Toyota Verso',
-    'ярис':     'Toyota Yaris',
-    # Skoda
-    'октавiя':  'Skoda Octavia',  'octavia':'Skoda Octavia',
-    'октавия':  'Skoda Octavia',
-    'суперб':   'Skoda Superb',   'superb': 'Skoda Superb',
-    'рапiд':    'Skoda Rapid',    'rapid':  'Skoda Rapid',
-    'кодiак':   'Skoda Kodiaq',   'kodiaq': 'Skoda Kodiaq',
-    'карок':    'Skoda Karoq',    'karoq':  'Skoda Karoq',
-    'фабiя':    'Skoda Fabia',    'fabia':  'Skoda Fabia',
-    # Volkswagen
-    'пассат':   'Volkswagen Passat',
-    'тiгуан':   'Volkswagen Tiguan',
-    'гольф':    'Volkswagen Golf',
-    'джетта':   'Volkswagen Jetta',
-    'поло':     'Volkswagen Polo',
-    'туарег':   'Volkswagen Touareg',
-    # BMW
-    'бмв':      'BMW',            'bmw':    'BMW',
-    'бумер':    'BMW',            'бумба':  'BMW',
-    # Mercedes
-    'мерс':     'Mercedes-Benz',  'мерседес':'Mercedes-Benz',
-    'mercedes': 'Mercedes-Benz',
-    'гелик':    'Mercedes-Benz G-Class',
-    'гелiкоптер':'Mercedes-Benz G-Class',
-    # Audi
-    'аудi':     'Audi',           'audi':   'Audi',
-    'ауди':     'Audi',
-    # Hyundai
-    'хундай':   'Hyundai',        'hyundai':'Hyundai',
-    'хундаi':   'Hyundai',
-    'туксон':   'Hyundai Tucson', 'tucson': 'Hyundai Tucson',
-    'солярiс':  'Hyundai Solaris',
-    'акцент':   'Hyundai Accent',
-    'санта фе': 'Hyundai Santa Fe',
-    # Kia
-    'спортаж':  'Kia Sportage',   'sportage':'Kia Sportage',
-    'сорento':  'Kia Sorento',    'sorento':'Kia Sorento',
-    'сiд':      'Kia Ceed',       'сid':    'Kia Ceed',
-    'рiо':      'Kia Rio',        'rio':    'Kia Rio',
-    # Renault
-    'дастер':   'Renault Duster', 'duster': 'Renault Duster',
-    'логан':    'Renault Logan',  'logan':  'Renault Logan',
-    'каптур':   'Renault Captur',
-    'сандеро':  'Renault Sandero',
-    'мегане':   'Renault Megane',
-    # Ford
-    'фокус':    'Ford Focus',     'focus':  'Ford Focus',
-    'фьюжн':    'Ford Fusion',    'fusion': 'Ford Fusion',
-    'куга':     'Ford Kuga',      'kuga':   'Ford Kuga',
-    'мустанг':  'Ford Mustang',
-    # Opel
-    'астра':    'Opel Astra',     'astra':  'Opel Astra',
-    'вектра':   'Opel Vectra',
-    'зафiра':   'Opel Zafira',
-    'iнсiгнiя': 'Opel Insignia',
-    # Chevrolet
-    'авео':     'Chevrolet Aveo', 'aveo':   'Chevrolet Aveo',
-    'круз':     'Chevrolet Cruze','cruze':  'Chevrolet Cruze',
-    'каптiва':  'Chevrolet Captiva',
-    # Mitsubishi
-    'аутлендер':'Mitsubishi Outlander',
-    'паджеро':  'Mitsubishi Pajero',
-    'лансер':   'Mitsubishi Lancer',
-    # Nissan
-    'кашкай':   'Nissan Qashqai', 'qashqai':'Nissan Qashqai',
-    'кашкаi':   'Nissan Qashqai',
-    'тiiда':    'Nissan Tiida',
-    'альмера':  'Nissan Almera',
-    'патфайндер':'Nissan Pathfinder',
-    # Mazda
-    'мазда':    'Mazda',          'mazda':  'Mazda',
-    # Honda
-    'хонда':    'Honda',          'honda':  'Honda',
-    'цивiк':    'Honda Civic',    'civic':  'Honda Civic',
-    'аккорд':   'Honda Accord',   'accord': 'Honda Accord',
-    'crv':      'Honda CR-V',     'срв':    'Honda CR-V',
-    # Lada / ВАЗ
-    'жигулi':   'ВАЗ', 'жигули': 'ВАЗ',
-    'нива':     'Lada Niva',
-    'калiна':   'Lada Kalina',
-    'гранта':   'Lada Granta',
-    'веста':    'Lada Vesta',
-    # Daewoo
-    'ланос':    'Daewoo Lanos',   'lanos':  'Daewoo Lanos',
-    'сенс':     'Daewoo Sens',
-    'нексiя':   'Daewoo Nexia',
-    # Nissan
-    'рог':      'Nissan Rogue',   'rogue':  'Nissan Rogue',
-    'мурано':   'Nissan Murano',  'murano': 'Nissan Murano',
-    'примера':  'Nissan Primera',
-    'примира':  'Nissan Primera',
-    'ноут':     'Nissan Note',    'note':   'Nissan Note',
-    'джук':     'Nissan Juke',    'juke':   'Nissan Juke',
-    'ексклюзив':'Nissan X-Trail', 'xtrail': 'Nissan X-Trail',
-    'iкстрейл': 'Nissan X-Trail', 'x-trail':'Nissan X-Trail',
-    'максима':  'Nissan Maxima',
-    # Toyota (доп.)
-    'хайс':     'Toyota HiAce',   'хайас':  'Toyota HiAce',
-    'хайлюкс':  'Toyota Hilux',   'хiлюкс': 'Toyota Hilux',
-    'харрiєр':  'Toyota Harrier',
-    'пiкнiк':   'Toyota Picnic',
-    'версо':    'Toyota Verso',
-    'iнова':    'Toyota Innova',
-    'форчунер': 'Toyota Fortuner',
-    'авалон':   'Toyota Avalon',
-    'сiєна':    'Toyota Sienna',
-    'хайбрид':  'Toyota Hybrid',
-    # Hyundai (доп.)
-    'хюндай':   'Hyundai',
-    'елантра':  'Hyundai Elantra','elantra':'Hyundai Elantra',
-    'i30':      'Hyundai i30',
-    'i40':      'Hyundai i40',
-    'велостер': 'Hyundai Veloster',
-    'матрiкс':  'Hyundai Matrix',
-    'гетц':     'Hyundai Getz',   'getz':   'Hyundai Getz',
-    'грандер':  'Hyundai Grandeur',
-    'гранд':    'Hyundai Grand Santa Fe',
-    # Kia (доп.)
-    'пiканто':  'Kia Picanto',    'picanto':'Kia Picanto',
-    'стiнгер':  'Kia Stinger',
-    'соул':     'Kia Soul',       'soul':   'Kia Soul',
-    'каренс':   'Kia Carens',
-    'оптима':   'Kia Optima',     'optima': 'Kia Optima',
-    'магентiс': 'Kia Magentis',
-    'церато':   'Kia Cerato',     'cerato': 'Kia Cerato',
-    # Mercedes (доп.)
-    'вiто':     'Mercedes-Benz Vito',
-    'спрiнтер': 'Mercedes-Benz Sprinter',
-    'сiшка':    'Mercedes-Benz C-Class',
-    'ешка':     'Mercedes-Benz E-Class',
-    'есiшка':   'Mercedes-Benz S-Class',
-    'глк':      'Mercedes-Benz GLK',
-    'гле':      'Mercedes-Benz GLE',
-    'гла':      'Mercedes-Benz GLA',
-    'ml':       'Mercedes-Benz ML',
-    # BMW (доп.)
-    'трiйка':   'BMW 3 Series',
-    'пятiрка':  'BMW 5 Series',
-    'сьомка':   'BMW 7 Series',
-    'iкс5':     'BMW X5',         'x5':     'BMW X5',
-    'iкс3':     'BMW X3',         'x3':     'BMW X3',
-    'iкс6':     'BMW X6',         'x6':     'BMW X6',
-    # Audi (доп.)
-    'а4':       'Audi A4',        'a4':     'Audi A4',
-    'а6':       'Audi A6',        'a6':     'Audi A6',
-    'а8':       'Audi A8',        'a8':     'Audi A8',
-    'куатро':   'Audi Quattro',
-    'ку7':      'Audi Q7',        'q7':     'Audi Q7',
-    'ку5':      'Audi Q5',        'q5':     'Audi Q5',
-    'ку3':      'Audi Q3',        'q3':     'Audi Q3',
-    'тт':       'Audi TT',        'tt':     'Audi TT',
-    # Volkswagen (доп.)
-    'транспортер':'Volkswagen Transporter',
-    'транс':    'Volkswagen Transporter',
-    'каравела': 'Volkswagen Caravelle',
-    'кадди':    'Volkswagen Caddy',
-    'кроссполо':'Volkswagen CrossPolo',
-    'шаран':    'Volkswagen Sharan',
-    'туран':    'Volkswagen Touran',
-    # Jeep
-    'чероки':   'Jeep Cherokee',  'cherokee':'Jeep Cherokee',
-    'гранд чероки':'Jeep Grand Cherokee',
-    'ренегад':  'Jeep Renegade',
-    'компас':   'Jeep Compass',
-    'рiнегат':  'Jeep Renegade',
-    # Subaru
-    'форестер': 'Subaru Forester','forester':'Subaru Forester',
-    'iмпреза':  'Subaru Impreza', 'impreza':'Subaru Impreza',
-    'аутбек':   'Subaru Outback', 'outback':'Subaru Outback',
-    'легасi':   'Subaru Legacy',
-    'субара':   'Subaru',
-    # Lexus
-    'лексус':   'Lexus',          'lexus':  'Lexus',
-    'rx':       'Lexus RX',       'рх':     'Lexus RX',
-    'is':       'Lexus IS',
-    'es':       'Lexus ES',
-    'lx':       'Lexus LX',
-    # Porsche
-    'кайен':    'Porsche Cayenne','cayenne':'Porsche Cayenne',
-    'панамера': 'Porsche Panamera',
-    'макан':    'Porsche Macan',  'macan':  'Porsche Macan',
-    # Land Rover
-    'дефендер': 'Land Rover Defender',
-    'дiскавери':'Land Rover Discovery',
-    'дiскавери':'Land Rover Discovery',
-    'рейндж':   'Range Rover',
-    'рендж':    'Range Rover',    'rangerover':'Range Rover',
-    'фрiлендер':'Land Rover Freelander',
-    # Mitsubishi (доп.)
-    'еклiпс':   'Mitsubishi Eclipse',
-    'галант':   'Mitsubishi Galant',
-    'делiка':   'Mitsubishi Delica',
-    'монтеро':  'Mitsubishi Montero',
-    # Volvo
-    'вольво':   'Volvo',          'volvo':  'Volvo',
-    # Peugeot
-    'пежо':     'Peugeot',        'peugeot':'Peugeot',
-    '308':      'Peugeot 308',
-    '408':      'Peugeot 408',
-    '508':      'Peugeot 508',
-    # Citroen
-    'сiтроен':  'Citroen',        'citroen':'Citroen',
-    'берлiнго': 'Citroen Berlingo',
-    'пiкассо':  'Citroen Picasso',
-    # Alfa Romeo
-    'альфа':    'Alfa Romeo',
-    'джульєтта':'Alfa Romeo Giulietta',
-    # Mazda (доп.)
-    'cx5':      'Mazda CX-5',     'сх5':    'Mazda CX-5',
-    'cx3':      'Mazda CX-3',
-    'cx7':      'Mazda CX-7',
-    'cx9':      'Mazda CX-9',
-    'мазда 3':  'Mazda 3',        'mazda3': 'Mazda 3',
-    'мазда 6':  'Mazda 6',        'mazda6': 'Mazda 6',
-    # Honda (доп.)
-    'пiлот':    'Honda Pilot',
-    'фiт':      'Honda Fit',
-    'джаз':     'Honda Jazz',
-    'iнсайт':   'Honda Insight',
-    'фрiд':     'Honda Freed',
-    # Chery / Geely / китайськi
-    'джилi':    'Geely',          'geely':  'Geely',
-    'черi':     'Chery',          'chery':  'Chery',
-    'тiгго':    'Chery Tiggo',    'tiggo':  'Chery Tiggo',
-    'джак':     'JAC',            'jac':    'JAC',
-    # Електро
-    'теслa':    'Tesla',          'tesla':  'Tesla',
-    'модел с':  'Tesla Model S',
-    'модел 3':  'Tesla Model 3',
-    'bolt':     'Chevrolet Bolt', 'болт':   'Chevrolet Bolt',
-    'лiф':      'Nissan Leaf',    'leaf':   'Nissan Leaf',
-    # UAZ / ГАЗ
-    'уаз':      'UAZ',
-    'газель':   'ГАЗ Газель',
-    'буханка':  'UAZ-452',
-    # Мiкроавтобуси
-    'спрiнтер': 'Mercedes-Benz Sprinter',
-    'транзит':  'Ford Transit',   'transit':'Ford Transit',
-    'дукато':   'Fiat Ducato',    'ducato': 'Fiat Ducato',
-    'боксер':   'Peugeot Boxer',
-    # Пiкапи
-    'таккома':  'Toyota Tacoma',
-    'рейдер':   'Mitsubishi Raider',
-    'навара':   'Nissan Navara',
-    'амарок':   'Volkswagen Amarok',
-}
-
-
-def normalize_car_name(text: str) -> str:
-    t = text.lower().strip()
-    # Спочатку точний збiг
-    if t in CAR_NAMES:
-        return CAR_NAMES[t]
-    # Пошук по частинi слова
-    for key, val in CAR_NAMES.items():
-        if key in t or t in key:
-            return val
-    # Якщо це короткий ID автопарку
-    digits = re.sub(r'[^0-9]', '', t)
-    if digits in FLEET_CARS:
-        return FLEET_CARS[digits]
-    # Повертаємо як є з першою великою
-    return text.strip().title()
-
-
-def resolve_fleet_car(text: str) -> str:
-    digits = re.sub(r'[^0-9]', '', text)
-    if digits in FLEET_CARS:
-        return FLEET_CARS[digits]
-    return text.upper()
-
+SERVICES_STO = [
+    ('ГБО',                        'https://farro.ua/install/'),
+    ('Автокондицiонери',           'https://farro.ua/kondicionery/'),
+    ('Двигуни',                    'https://farro.ua/kondicionery/'),
+    ('Розвал-сходження 3D',        'https://farro.ua/razval-shozhdenie/'),
+    ('Промивка системи охолодження','https://farro.ua/promyvka-ohlazhdeniya/'),
+    ('Ремонт фар та бамперiв',     'https://farro.ua/remont-far-i-bamperov/'),
+    ('Ремонт ходової',             'https://farro.ua/remont-hodovoj/'),
+    ('Вихлопнi системи',           'https://farro.ua/remont-vyhlopnoj/'),
+    ('Iнше',                       ''),
+]
 
 STO_INFO = {
     'sto': {
         'name':     'СТО Farro',
-        'address':  'вул. Богдана Хмельницького 4а (лівий берег)',
+        'address':  'вул. Богдана Хмельницького 4а (лiвий берег)',
         'maps':     'https://maps.app.goo.gl/yzXq7rwV2sB9SkRj9',
         'hours':    'ПН-ПТ 09:00-18:00',
-        'services': ['ГБО','Розвал-сходження 3D','Автокондиціонери',
-                     'Ремонт ходової','Зварювальні роботи','Двигуни','Пайка пластику','Інше'],
+        'services': [s[0] for s in SERVICES_STO],
     },
     'body': {
-        'name':     'Кузовний сервіс Farro',
+        'name':     'Кузовний сервiс Farro',
         'address':  'вул. Павла Чубинського 2а',
         'maps':     'https://maps.app.goo.gl/xe7u4vD1tvSg6buy6',
         'hours':    'ПН-ПТ 09:00-18:00',
-        'services': ['Рихтування авто','Покраска авто','Видалення вмятин без покраски (PDR)','Інше'],
+        'services': [s[0] for s in SERVICES_BODY],
     },
 }
 
-def get_routing(service):
-    return list(set(STAFF_IDS))
+# 26 машин автопарку
+FLEET_CARS = {
+    '0418':'АЕ0418ОР','2993':'АЕ2993РI','7935':'AE7935PI',
+    '3021':'КА3021ЕО','9489':'КА9489ЕР','7121':'АЕ7121ТА',
+    '8204':'АЕ8204ТВ','2548':'AE2548TB','9245':'АЕ9245ТО',
+    '0736':'AE0736PK','4715':'AE4715TH','6514':'АЕ6514ТС',
+    '4895':'KA4895HE','6843':'KA6843HB','5308':'АЕ5308ТЕ',
+    '1875':'BI1875HO','0665':'KA0665IH','0349':'KA0349HO',
+    '9854':'BC9854PM','8391':'АЕ8391ТМ','4553':'AE4553XB',
+    '8730':'KA8730IX','5725':'AE5725OO','6584':'СА6584КА',
+    '3531':'AI3531PH','1457':'AI1457MM',
+}
+
+CAR_NAMES = {
+    'камри':'Toyota Camry','кемрi':'Toyota Camry','кемри':'Toyota Camry','camry':'Toyota Camry',
+    'прадо':'Toyota Land Cruiser Prado','прадiк':'Toyota Land Cruiser Prado','прадик':'Toyota Land Cruiser Prado',
+    'rav4':'Toyota RAV4','рав4':'Toyota RAV4','рав':'Toyota RAV4','рафiк':'Toyota RAV4',
+    'крузак':'Toyota Land Cruiser','крузер':'Toyota Land Cruiser',
+    'хайлендер':'Toyota Highlander','корола':'Toyota Corolla','ярис':'Toyota Yaris',
+    'авенсiс':'Toyota Avensis','хайс':'Toyota HiAce','хайлюкс':'Toyota Hilux',
+    'форчунер':'Toyota Fortuner','авалон':'Toyota Avalon','сiєна':'Toyota Sienna',
+    'октавiя':'Skoda Octavia','октавия':'Skoda Octavia','octavia':'Skoda Octavia',
+    'суперб':'Skoda Superb','рапiд':'Skoda Rapid','кодiак':'Skoda Kodiaq',
+    'карок':'Skoda Karoq','фабiя':'Skoda Fabia','fabia':'Skoda Fabia',
+    'пассат':'Volkswagen Passat','тiгуан':'Volkswagen Tiguan','гольф':'Volkswagen Golf',
+    'джетта':'Volkswagen Jetta','поло':'Volkswagen Polo','туарег':'Volkswagen Touareg',
+    'транспортер':'Volkswagen Transporter','транс':'Volkswagen Transporter',
+    'каравела':'Volkswagen Caravelle','шаран':'Volkswagen Sharan','туран':'Volkswagen Touran',
+    'бмв':'BMW','bmw':'BMW','бумер':'BMW','бумба':'BMW',
+    'трiйка':'BMW 3 Series','пятiрка':'BMW 5 Series','сьомка':'BMW 7 Series',
+    'iкс5':'BMW X5','x5':'BMW X5','iкс3':'BMW X3','x3':'BMW X3','iкс6':'BMW X6',
+    'мерс':'Mercedes-Benz','мерседес':'Mercedes-Benz','mercedes':'Mercedes-Benz',
+    'гелик':'Mercedes-Benz G-Class','вiто':'Mercedes-Benz Vito',
+    'спрiнтер':'Mercedes-Benz Sprinter','сiшка':'Mercedes-Benz C-Class',
+    'ешка':'Mercedes-Benz E-Class','гле':'Mercedes-Benz GLE','глк':'Mercedes-Benz GLK',
+    'аудi':'Audi','audi':'Audi','ауди':'Audi',
+    'а4':'Audi A4','a4':'Audi A4','а6':'Audi A6','a6':'Audi A6',
+    'а8':'Audi A8','a8':'Audi A8','ку7':'Audi Q7','q7':'Audi Q7',
+    'ку5':'Audi Q5','q5':'Audi Q5','тт':'Audi TT',
+    'хундай':'Hyundai','hyundai':'Hyundai','хюндай':'Hyundai',
+    'туксон':'Hyundai Tucson','tucson':'Hyundai Tucson',
+    'елантра':'Hyundai Elantra','i30':'Hyundai i30','гетц':'Hyundai Getz',
+    'солярiс':'Hyundai Solaris','акцент':'Hyundai Accent','грандер':'Hyundai Grandeur',
+    'спортаж':'Kia Sportage','sportage':'Kia Sportage',
+    'сорento':'Kia Sorento','sorento':'Kia Sorento',
+    'сiд':'Kia Ceed','рiо':'Kia Rio','rio':'Kia Rio',
+    'пiканто':'Kia Picanto','соул':'Kia Soul','оптима':'Kia Optima',
+    'церато':'Kia Cerato','cerato':'Kia Cerato',
+    'дастер':'Renault Duster','duster':'Renault Duster',
+    'логан':'Renault Logan','logan':'Renault Logan',
+    'каптур':'Renault Captur','сандеро':'Renault Sandero','мегане':'Renault Megane',
+    'фокус':'Ford Focus','focus':'Ford Focus',
+    'фьюжн':'Ford Fusion','fusion':'Ford Fusion',
+    'куга':'Ford Kuga','kuga':'Ford Kuga',
+    'транзит':'Ford Transit','transit':'Ford Transit',
+    'астра':'Opel Astra','вектра':'Opel Vectra','зафiра':'Opel Zafira',
+    'авео':'Chevrolet Aveo','aveo':'Chevrolet Aveo',
+    'круз':'Chevrolet Cruze','cruze':'Chevrolet Cruze',
+    'bolt':'Chevrolet Bolt','болт':'Chevrolet Bolt',
+    'аутлендер':'Mitsubishi Outlander','паджеро':'Mitsubishi Pajero','лансер':'Mitsubishi Lancer',
+    'кашкай':'Nissan Qashqai','qashqai':'Nissan Qashqai',
+    'рог':'Nissan Rogue','rogue':'Nissan Rogue',
+    'мурано':'Nissan Murano','джук':'Nissan Juke','juke':'Nissan Juke',
+    'iкстрейл':'Nissan X-Trail','x-trail':'Nissan X-Trail',
+    'лiф':'Nissan Leaf','leaf':'Nissan Leaf',
+    'тiiда':'Nissan Tiida','альмера':'Nissan Almera','максима':'Nissan Maxima',
+    'мазда':'Mazda','mazda':'Mazda',
+    'cx5':'Mazda CX-5','сх5':'Mazda CX-5','cx3':'Mazda CX-3','cx7':'Mazda CX-7',
+    'хонда':'Honda','honda':'Honda',
+    'цивiк':'Honda Civic','civic':'Honda Civic',
+    'аккорд':'Honda Accord','accord':'Honda Accord',
+    'crv':'Honda CR-V','срв':'Honda CR-V','пiлот':'Honda Pilot',
+    'форестер':'Subaru Forester','forester':'Subaru Forester',
+    'iмпреза':'Subaru Impreza','аутбек':'Subaru Outback','субара':'Subaru',
+    'лексус':'Lexus','lexus':'Lexus','rx':'Lexus RX','рх':'Lexus RX',
+    'кайен':'Porsche Cayenne','cayenne':'Porsche Cayenne',
+    'панамера':'Porsche Panamera','макан':'Porsche Macan',
+    'дефендер':'Land Rover Defender','дiскавери':'Land Rover Discovery',
+    'рейндж':'Range Rover','рендж':'Range Rover','rangerover':'Range Rover',
+    'вольво':'Volvo','volvo':'Volvo',
+    'пежо':'Peugeot','peugeot':'Peugeot','308':'Peugeot 308','408':'Peugeot 408',
+    'сiтроен':'Citroen','citroen':'Citroen','берлiнго':'Citroen Berlingo',
+    'альфа':'Alfa Romeo',
+    'жигулi':'ВАЗ','жигули':'ВАЗ','нива':'Lada Niva','веста':'Lada Vesta',
+    'ланос':'Daewoo Lanos','lanos':'Daewoo Lanos','сенс':'Daewoo Sens',
+    'джилi':'Geely','geely':'Geely','черi':'Chery','chery':'Chery','тiгго':'Chery Tiggo',
+    'теслa':'Tesla','tesla':'Tesla',
+    'уаз':'UAZ','газель':'ГАЗ Газель','буханка':'UAZ-452',
+    'дукато':'Fiat Ducato','ducato':'Fiat Ducato',
+    'чероки':'Jeep Cherokee','cherokee':'Jeep Cherokee',
+    'ренегад':'Jeep Renegade','компас':'Jeep Compass',
+}
+
+def normalize_car_name(text):
+    if not text or text == '-':
+        return ''
+    t = text.lower().strip()
+    if t in CAR_NAMES:
+        return CAR_NAMES[t]
+    for key, val in CAR_NAMES.items():
+        if key in t:
+            return val
+    digits = re.sub(r'[^0-9]', '', t)
+    if digits in FLEET_CARS:
+        return FLEET_CARS[digits]
+    return text.strip().title()
+
+def resolve_fleet_car(text):
+    if not text or text == '-':
+        return ''
+    digits = re.sub(r'[^0-9]', '', text)
+    if digits in FLEET_CARS:
+        return FLEET_CARS[digits]
+    return text.upper()
 
 def open_sheet():
     d = json.loads(GOOGLE_CREDS)
@@ -369,36 +196,28 @@ def now_str():
 def today_str():
     return datetime.now(KYIV_TZ).strftime('%d.%m.%y')
 
-def parse_num(v):
-    s = re.sub(r'[^0-9]', '', str(v or ''))
-    try: return int(s) if s else None
-    except: return None
-
 def is_staff(uid):
     return uid in STAFF_IDS
 
 def polish_reply(raw):
-    logger.info('polish_reply CALLED. raw={}'.format(raw[:50]))
-    logger.info('claude_client is None: {}'.format(claude_client is None))
+    logger.info('polish_reply CALLED raw=%s', raw[:60])
     if not claude_client:
-        logger.warning('No claude_client - returning raw text')
+        logger.warning('claude_client is None!')
         return raw
     try:
-        logger.info('Calling Claude API...')
-        prompt = ('Ти ввiчливий та теплий менеджер автосервiсу Farro. '
-                  'Майстер написав: ' + raw + '. '
-                  'Перепиши украiнською мовою — красиво, ввiчливо, детально, без помилок. '
-                  'Додай привiтнiсть та турботу. Збережи суть. '
-                  'Вiдповiдай тiльки готовим текстом без будь-яких пояснень.')
+        prompt = ('Ти ввiчливий менеджер автосервiсу Farro. '
+                  'Майстер написав клiєнту: ' + raw + '. '
+                  'Перепиши украiнською мовою — красиво, ввiчливо, тепло, без помилок. '
+                  'Збережи суть. Тiльки готовий текст.')
         resp = claude_client.messages.create(
             model='claude-sonnet-4-20250514',
             max_tokens=400,
             messages=[{'role': 'user', 'content': prompt}])
         result = resp.content[0].text.strip()
-        logger.info('Claude result: {}'.format(result[:100]))
+        logger.info('polish_reply RESULT=%s', result[:80])
         return result if result else raw
     except Exception as e:
-        logger.error('polish_reply ERROR: {}'.format(e))
+        logger.error('polish_reply ERROR: %s', e)
         return raw
 
 def get_client(tg_id):
@@ -416,17 +235,9 @@ def save_client(tg_id, name, phone, car, model):
     rows = ws.get_all_values()
     for i, row in enumerate(rows[1:], start=2):
         if str(row[0]).strip() == str(tg_id):
-            ws.update('B{}:F{}'.format(i,i), [[name,phone,car.upper(),model,today_str()]])
+            ws.update('B{}:F{}'.format(i,i), [[name,phone,car,model,today_str()]])
             return
-    ws.append_row([str(tg_id),name,phone,car.upper(),model,today_str()])
-
-def find_client_by_car(car):
-    ws = get_ws('Клиенты')
-    cc = car.upper().replace(' ','')
-    for row in ws.get_all_values()[1:]:
-        if len(row)>3 and cc in str(row[3]).upper().replace(' ',''):
-            return {'tg_id':row[0],'name':row[1],'car':row[3]}
-    return None
+    ws.append_row([str(tg_id),name,phone,car,model,today_str()])
 
 def get_all_clients():
     ws = get_ws('Клиенты')
@@ -452,8 +263,9 @@ def get_requests_by_client(tg_id):
     result = []
     for row in get_ws('Заказы').get_all_values()[1:]:
         if len(row)>2 and str(row[2]).strip() == str(tg_id):
-            result.append({'id':row[0],'date':row[1],'sto':row[5] if len(row)>5 else '',
-                           'service':row[6] if len(row)>6 else '','status':row[8] if len(row)>8 else ''})
+            result.append({'id':row[0],'date':row[1],
+                           'service':row[6] if len(row)>6 else '',
+                           'status':row[8] if len(row)>8 else ''})
     return result[-5:]
 
 def get_orders_by_car(car):
@@ -461,30 +273,42 @@ def get_orders_by_car(car):
     result = []
     for row in get_ws('Заказы').get_all_values()[1:]:
         if len(row)>4 and cc in str(row[4]).upper().replace(' ',''):
-            result.append({'id':row[0],'date':row[1],'service':row[6] if len(row)>6 else '',
+            result.append({'id':row[0],'date':row[1],
+                           'service':row[6] if len(row)>6 else '',
                            'status':row[8] if len(row)>8 else ''})
     return result[-5:]
 
+# ── Клавiатури ────────────────────────────────────────────────
+
 def kb_welcome():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Послуги та цiни',       callback_data='w_prices')],
-        [InlineKeyboardButton('Статус мого авто',       callback_data='w_status')],
-        [InlineKeyboardButton('Записатися на ремонт',   callback_data='w_new')],
-        [InlineKeyboardButton('Написати менеджеру',     callback_data='w_manager')],
+        [InlineKeyboardButton('Послуги та цiни',        callback_data='w_prices')],
+        [InlineKeyboardButton('Статус мого авто',        callback_data='w_status')],
+        [InlineKeyboardButton('Записатися на ремонт',    callback_data='w_new')],
+        [InlineKeyboardButton('Написати менеджеру',      callback_data='w_manager')],
     ])
 
 def kb_main_client():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Послуги та цiни',       callback_data='w_prices')],
-        [InlineKeyboardButton('Статус мого авто',      callback_data='c_status')],
-        [InlineKeyboardButton('Записатися на ремонт',  callback_data='w_new')],
-        [InlineKeyboardButton('Мої заявки',            callback_data='c_requests')],
-        [InlineKeyboardButton('Написати менеджеру',    callback_data='c_contact')],
+        [InlineKeyboardButton('Послуги та цiни',        callback_data='w_prices')],
+        [InlineKeyboardButton('Статус мого авто',        callback_data='c_status')],
+        [InlineKeyboardButton('Записатися на ремонт',    callback_data='w_new')],
+        [InlineKeyboardButton('Мої заявки',              callback_data='c_requests')],
+        [InlineKeyboardButton('Написати менеджеру',      callback_data='c_contact')],
     ])
 
-def kb_reply_to_sto():
+def kb_reply_to_manager():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton('Вiдповiсти менеджеру', callback_data='c_contact')],
+    ])
+
+def kb_staff_main():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton('Новi заявки',              callback_data='s_new')],
+        [InlineKeyboardButton('Пiдтвердити запис',        callback_data='s_confirm')],
+        [InlineKeyboardButton('Авто готове',              callback_data='s_ready')],
+        [InlineKeyboardButton('Всi активнi',              callback_data='s_all')],
+        [InlineKeyboardButton('Написати клiєнту',         callback_data='s_write_client')],
     ])
 
 def kb_choose_sto():
@@ -493,21 +317,20 @@ def kb_choose_sto():
         [InlineKeyboardButton('Кузовний сервiс (Рихтування, Покраска, PDR)', callback_data='sto_body')],
     ])
 
+def kb_choose_prices():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton('Кузовний сервiс (Чубинського)', callback_data='prices_body')],
+        [InlineKeyboardButton('СТО (Хмельницького)',           callback_data='prices_sto')],
+        [InlineKeyboardButton('Назад',                         callback_data='back_main')],
+    ])
+
 def kb_services(sto_key):
     services = STO_INFO[sto_key]['services']
     buttons  = []
     for svc in services:
-        buttons.append([InlineKeyboardButton(svc, callback_data='svc_{}_{}'.format(sto_key, svc[:30]))])
+        buttons.append([InlineKeyboardButton(svc, callback_data='svc_{}_{}'.format(sto_key, svc[:28]))])
+    buttons.append([InlineKeyboardButton('Назад', callback_data='back_main')])
     return InlineKeyboardMarkup(buttons)
-
-def kb_staff_main():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Новi заявки',         callback_data='s_new')],
-        [InlineKeyboardButton('Пiдтвердити запис',   callback_data='s_confirm')],
-        [InlineKeyboardButton('Авто готове',         callback_data='s_ready')],
-        [InlineKeyboardButton('Всi активнi',         callback_data='s_all')],
-        [InlineKeyboardButton('Написати клiєнту',    callback_data='s_write_client')],
-    ])
 
 def kb_write_templates():
     return InlineKeyboardMarkup([
@@ -522,18 +345,22 @@ def kb_write_templates():
 def kb_cancel():
     return InlineKeyboardMarkup([[InlineKeyboardButton('Скасувати', callback_data='cancel')]])
 
+async def send_to_client(bot, client_id, text):
+    msg = 'Повiдомлення вiд СТО Farro:\n\n' + text
+    await bot.send_message(chat_id=int(client_id), text=msg, reply_markup=kb_reply_to_manager())
+
 async def notify_staff(bot, service, message, client_id=None):
     kb = None
     if client_id:
         kb = InlineKeyboardMarkup([[InlineKeyboardButton(
             'Вiдповiсти клiєнту', callback_data='reply_{}'.format(client_id))]])
-    for uid in get_routing(service):
-        try: await bot.send_message(chat_id=uid, text=message, reply_markup=kb)
-        except Exception as e: logger.error('notify_staff {}: {}'.format(uid, e))
+    for uid in STAFF_IDS:
+        try:
+            await bot.send_message(chat_id=uid, text=message, reply_markup=kb)
+        except Exception as e:
+            logger.error('notify_staff %s: %s', uid, e)
 
-async def send_to_client(bot, client_id, text):
-    msg = 'Повiдомлення вiд СТО Farro:\n\n' + text
-    await bot.send_message(chat_id=int(client_id), text=msg)
+# ── Handlers ─────────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
@@ -547,11 +374,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     client = get_client(uid)
     if client:
         await update.message.reply_text(
-            'З поверненням, {}! Чим можу допомогти?'.format(client['name']),
+            'З поверненням, {}!'.format(client['name']),
             reply_markup=kb_main_client())
     else:
         await update.message.reply_text(
-            'Вiтаємо в СТО Farro!\nВи вже здавали до нас авто?',
+            'Вiтаємо в СТО Farro!\nЧим можемо допомогти?',
             reply_markup=kb_welcome())
 
 async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -567,26 +394,31 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ud['reg_phone'] = text; ud['reg_step'] = 'car'
         await update.message.reply_text('Номер вашого авто? (або - якщо немає)'); return
     if ud.get('reg_step') == 'car':
-        car_val = resolve_fleet_car(text) if text != '-' else ''
-        ud['reg_car'] = car_val; ud['reg_step'] = 'model'
+        ud['reg_car'] = resolve_fleet_car(text); ud['reg_step'] = 'model'
         await update.message.reply_text('Марка i модель? (або -)'); return
     if ud.get('reg_step') == 'model':
-        model = normalize_car_name(text) if text != '-' else ''
+        model = normalize_car_name(text)
         save_client(uid, ud['reg_name'], ud['reg_phone'], ud.get('reg_car',''), model)
         name = ud['reg_name']; ud.clear()
-        await update.message.reply_text('Дякуємо, {}! Зареєстрованi.'.format(name), reply_markup=kb_main_client()); return
+        await update.message.reply_text(
+            'Дякуємо, {}! Зареєстрованi.'.format(name),
+            reply_markup=kb_main_client()); return
 
-    # Пошук авто для статусу
+    # Пошук авто
     if ud.get('wait_car_status'):
         ud.pop('wait_car_status')
         orders = get_orders_by_car(text)
         if not orders:
-            await update.message.reply_text('Авто {} не знайдено.'.format(text.upper()), reply_markup=kb_main_client()); return
+            await update.message.reply_text(
+                'Авто {} не знайдено.'.format(text.upper()),
+                reply_markup=kb_main_client() if get_client(uid) else kb_welcome()); return
         icons = {'new':'Нова','confirmed':'Пiдтверджено','in_work':'В роботi','ready':'Готово','issued':'Видано'}
         lines = ['Статус авто {}:'.format(text.upper())]
         for o in reversed(orders):
             lines.append('{} | {} | {}'.format(o['date'], o['service'], icons.get(o['status'], o['status'])))
-        await update.message.reply_text('\n'.join(lines), reply_markup=kb_main_client()); return
+        await update.message.reply_text(
+            '\n'.join(lines),
+            reply_markup=kb_main_client() if get_client(uid) else kb_welcome()); return
 
     # Побажання при записi
     if ud.get('wait_wish'):
@@ -598,29 +430,31 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         car     = client['car']  if client else 'не вказано'
         rid     = save_request(uid, cname, car, sto_key, service, text)
         sto     = STO_INFO[sto_key]
-        msg = ('НОВА ЗАЯВКА {}\n\nКлiєнт: {}\nАвто: {}\nСТО: {}\nАдреса: {}\n'
-               'Послуга: {}\nПобажання: {}\nЧас: {}').format(
+        msg = ('НОВА ЗАЯВКА {}\n\nКлiєнт: {}\nАвто: {}\nСТО: {}\n'
+               'Адреса: {}\nПослуга: {}\nПобажання: {}\n{}').format(
             rid, cname, car, sto['name'], sto['address'], service, text, now_str())
         await notify_staff(ctx.bot, service, msg, client_id=uid)
         await update.message.reply_text(
-            'Заявку прийнято!\nНомер: {}\nПослуга: {}\n{}\n{}\n{}\n\nМайстер зв\'яжеться з вами найближчим часом.'.format(
-                rid, service, sto['name'], sto['address'], sto['hours']),
-            reply_markup=kb_main_client()); return
+            'Заявку прийнято!\nНомер: {}\nПослуга: {}\n{}\n{}\nМайстер зв\'яжеться найближчим часом.'.format(
+                rid, service, sto['name'], sto['hours']),
+            reply_markup=kb_main_client() if client else kb_welcome()); return
 
-    # Повiдомлення вiд клiєнта майстру
+    # Повiдомлення вiд клiєнта менеджеру
     if ud.get('wait_client_msg'):
         ud.pop('wait_client_msg')
         client = get_client(uid)
-        cname  = client['name'] if client else str(uid)
+        cname  = client['name'] if client else 'Новий клiєнт'
         car    = client['car']  if client else 'не вказано'
         fwd    = 'Повiдомлення вiд клiєнта:\n{} | {}\n\n{}'.format(cname, car, text)
-        kb_r   = InlineKeyboardMarkup([[InlineKeyboardButton('Вiдповiсти клiєнту', callback_data='reply_{}'.format(uid))]])
+        kb_r   = InlineKeyboardMarkup([[InlineKeyboardButton(
+            'Вiдповiсти клiєнту', callback_data='reply_{}'.format(uid))]])
         for mid in STAFF_IDS:
             try: await ctx.bot.send_message(chat_id=mid, text=fwd, reply_markup=kb_r)
-            except Exception as e: logger.error('fwd: {}'.format(e))
-        await update.message.reply_text('Повiдомлення надiслано майстру.', reply_markup=kb_main_client()); return
+            except Exception as e: logger.error('fwd: %s', e)
+        kb_back = kb_main_client() if client else kb_welcome()
+        await update.message.reply_text('Повiдомлення надiслано менеджеру.', reply_markup=kb_back); return
 
-    # Вiдповiдь майстра клiєнту
+    # Вiдповiдь менеджера клiєнту — через Claude
     if ud.get('wait_reply_to'):
         client_id = ud.pop('wait_reply_to')
         await update.message.reply_text('Обробляю...')
@@ -628,13 +462,13 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         try:
             await send_to_client(ctx.bot, client_id, polished)
             await update.message.reply_text(
-                'Надiслано клiєнту.\n\nВаш текст: ' + text + '\n\nНадiслано: ' + polished,
+                'Надiслано клiєнту.\n\nВаш текст:\n' + text + '\n\nНадiслано:\n' + polished,
                 reply_markup=kb_staff_main())
         except Exception as e:
             await update.message.reply_text('Помилка: {}'.format(e), reply_markup=kb_staff_main())
         return
 
-    # Пiдтвердження запису
+    # Пiдтвердження запису по номеру
     if ud.get('wait_confirm_id'):
         rid = text.strip().upper(); ud.pop('wait_confirm_id')
         ws  = get_ws('Заказы')
@@ -645,14 +479,17 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 service   = row[6] if len(row)>6 else ''
                 if client_id:
                     try:
-                        await ctx.bot.send_message(chat_id=int(client_id),
-                            text='Ваш запис пiдтверджено!\nЗаявка: {}\nПослуга: {}\nЧекаємо вас! СТО Farro'.format(rid, service))
-                    except Exception as e: logger.error('confirm: {}'.format(e))
-                await update.message.reply_text('Запис {} пiдтверджено.'.format(rid), reply_markup=kb_staff_main())
+                        await ctx.bot.send_message(
+                            chat_id=int(client_id),
+                            text='Ваш запис пiдтверджено!\nЗаявка: {}\nПослуга: {}\nЧекаємо вас!'.format(rid, service),
+                            reply_markup=kb_reply_to_manager())
+                    except Exception as e: logger.error('confirm: %s', e)
+                await update.message.reply_text(
+                    'Запис {} пiдтверджено.'.format(rid), reply_markup=kb_staff_main())
                 return
         await update.message.reply_text('Заявку {} не знайдено.'.format(rid), reply_markup=kb_staff_main()); return
 
-    # Свiй текст для клiєнта
+    # Свiй текст для клiєнта — через Claude
     if ud.get('wait_custom_msg'):
         ud.pop('wait_custom_msg')
         client_id = ud.get('write_to_client_id')
@@ -662,13 +499,13 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         try:
             await send_to_client(ctx.bot, client_id, polished)
             await update.message.reply_text(
-                'Надiслано клiєнту {}.\n\nВаш текст: '.format(cname) + text + '\n\nНадiслано: ' + polished,
+                'Надiслано клiєнту {}.\n\nВаш текст:\n'.format(cname) + text + '\n\nНадiслано:\n' + polished,
                 reply_markup=kb_staff_main())
         except Exception as e:
             await update.message.reply_text('Помилка: {}'.format(e), reply_markup=kb_staff_main())
         return
 
-    kb = kb_staff_main() if is_staff(uid) else kb_main_client()
+    kb = kb_staff_main() if is_staff(uid) else (kb_main_client() if get_client(uid) else kb_welcome())
     await update.message.reply_text('Оберiть дiю:', reply_markup=kb)
 
 async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -678,47 +515,93 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     ud   = ctx.user_data
 
+    def client_kb():
+        return kb_main_client() if get_client(uid) else kb_welcome()
+
     if data == 'cancel':
         ud.clear()
-        kb = kb_staff_main() if is_staff(uid) else kb_main_client()
+        kb = kb_staff_main() if is_staff(uid) else client_kb()
         await q.edit_message_text('Скасовано.', reply_markup=kb); return
 
+    if data == 'back_main':
+        kb = kb_staff_main() if is_staff(uid) else client_kb()
+        await q.edit_message_text('Головне меню:', reply_markup=kb); return
+
+    # Послуги та цiни — вибiр СТО
     if data == 'w_prices':
-        p1 = 'Послуги та цiни СТО Farro\n'
-        p2 = '\nСТО (вул. Хмельницького 4а):\n'
-        p3 = 'ГБО — вiд 8 000 грн\n'
-        p4 = 'Розвал-сходження 3D — 800 грн\n'
-        p5 = 'Автокондицiонери — вiд 500 грн\n'
-        p6 = 'Ремонт ходової — вiд 300 грн/год\n'
-        p7 = 'Пайка пластику — вiд 400 грн\n'
-        p8 = '\nКузовний сервiс (вул. Чубинського 2а):\n'
-        p9 = 'Рихтування — вiд 500 грн/елемент\n'
-        p10 = 'Покраска — вiд 1 500 грн/елемент\n'
-        p11 = 'PDR (вмятини без покраски) — вiд 600 грн\n'
-        p12 = '\nТочну вартiсть — пiсля огляду. Графiк: ПН-ПТ 09:00-18:00'
-        prices = p1+p2+p3+p4+p5+p6+p7+p8+p9+p10+p11+p12
-        kb = kb_main_client() if get_client(uid) else kb_welcome()
-        await q.edit_message_text(prices, reply_markup=kb)
-        return
+        await q.edit_message_text(
+            'Оберiть сервiс для перегляду послуг:',
+            reply_markup=kb_choose_prices()); return
 
-    if data == 'w_manager':
-        ud['wait_client_msg'] = True
-        msg = 'Напишiть питання — менеджер вiдповiсть найближчим часом. Реєстрацiя не потрiбна!'
-        await q.edit_message_text(msg, reply_markup=kb_cancel())
-        return
+    if data == 'prices_body':
+        lines = ['Кузовний сервiс Farro\nвул. Павла Чубинського 2а\nПН-ПТ 09:00-18:00\n']
+        for name, url in SERVICES_BODY:
+            if url:
+                lines.append('{}\n{}'.format(name, url))
+            else:
+                lines.append(name)
+        await q.edit_message_text(
+            '\n\n'.join(lines),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('Записатися', callback_data='sto_body')],
+                [InlineKeyboardButton('Назад', callback_data='w_prices')],
+            ])); return
 
-    if data == 'w_status':
-        ud['wait_car_status'] = True
-        await q.edit_message_text('Введiть номер вашого авто:', reply_markup=kb_cancel()); return
+    if data == 'prices_sto':
+        lines = ['СТО Farro\nвул. Богдана Хмельницького 4а\nПН-ПТ 09:00-18:00\n']
+        for name, url in SERVICES_STO:
+            if url:
+                lines.append('{}\n{}'.format(name, url))
+            else:
+                lines.append(name)
+        await q.edit_message_text(
+            '\n\n'.join(lines),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('Записатися', callback_data='sto_sto')],
+                [InlineKeyboardButton('Назад', callback_data='w_prices')],
+            ])); return
 
+    # Статус авто
+    if data in ('w_status', 'c_status'):
+        client = get_client(uid)
+        if client and client['car']:
+            orders = get_orders_by_car(client['car'])
+            if not orders:
+                await q.edit_message_text(
+                    'Активних заявок для {} немає.'.format(client['car']),
+                    reply_markup=client_kb()); return
+            icons = {'new':'Нова','confirmed':'Пiдтверджено','in_work':'В роботi','ready':'Готово','issued':'Видано'}
+            lines = ['Статус авто {}:'.format(client['car'])]
+            for o in reversed(orders):
+                lines.append('{} | {} | {}'.format(o['date'], o['service'], icons.get(o['status'], o['status'])))
+            await q.edit_message_text('\n'.join(lines), reply_markup=client_kb()); return
+        else:
+            ud['wait_car_status'] = True
+            await q.edit_message_text('Введiть номер авто:', reply_markup=kb_cancel()); return
+
+    # Запис
     if data == 'w_new':
         client = get_client(uid)
         if not client:
             ud['reg_step'] = 'name'
-            await q.edit_message_text('Для запису потрiбна реєстрацiя.\nЯк вас звати?', reply_markup=kb_cancel())
+            await q.edit_message_text(
+                'Для запису — коротка реєстрацiя.\nЯк вас звати?',
+                reply_markup=kb_cancel())
         else:
             await q.edit_message_text('Оберiть СТО:', reply_markup=kb_choose_sto())
         return
+
+    if data == 'w_manager':
+        ud['wait_client_msg'] = True
+        await q.edit_message_text(
+            'Напишiть ваше питання. Менеджер вiдповiсть найближчим часом.\nРеєстрацiя не потрiбна!',
+            reply_markup=kb_cancel()); return
+
+    if data == 'c_contact':
+        ud['wait_client_msg'] = True
+        await q.edit_message_text(
+            'Напишiть ваше питання — менеджер вiдповiсть найближчим часом:',
+            reply_markup=kb_cancel()); return
 
     if data.startswith('sto_'):
         sto_key = data[4:]
@@ -726,7 +609,7 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ud['selected_sto'] = sto_key
         sto = STO_INFO[sto_key]
         await q.edit_message_text(
-            '{}\n{}\n{}\nОберiть послугу:'.format(sto['name'], sto['address'], sto['hours']),
+            '{}\n{}\n{}\n\nОберiть послугу:'.format(sto['name'], sto['address'], sto['hours']),
             reply_markup=kb_services(sto_key)); return
 
     if data.startswith('svc_'):
@@ -734,50 +617,33 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         sto_key = parts[0]
         service = parts[1] if len(parts)>1 else 'Iнше'
         for svc in STO_INFO.get(sto_key,{}).get('services',[]):
-            if svc[:30] == service: service = svc; break
+            if svc[:28] == service: service = svc; break
         ud['selected_sto']     = sto_key
         ud['selected_service'] = service
         ud['wait_wish']        = True
         await q.edit_message_text(
-            'Послуга: {}\n\nОпишiть проблему i зручний час для запису:'.format(service),
+            'Послуга: {}\n\nОпишiть проблему i зручний час:'.format(service),
             reply_markup=kb_cancel()); return
-
-    if data == 'c_status':
-        client = get_client(uid)
-        if not client:
-            await q.edit_message_text('Спочатку зареєструйтесь — /start'); return
-        if not client['car']:
-            ud['wait_car_status'] = True
-            await q.edit_message_text('Введiть номер авто:', reply_markup=kb_cancel()); return
-        orders = get_orders_by_car(client['car'])
-        if not orders:
-            await q.edit_message_text('Активних заявок немає.', reply_markup=kb_main_client()); return
-        icons = {'new':'Нова','confirmed':'Пiдтверджено','in_work':'В роботi','ready':'Готово','issued':'Видано'}
-        lines = ['Статус авто {}:'.format(client['car'])]
-        for o in reversed(orders):
-            lines.append('{} | {} | {}'.format(o['date'], o['service'], icons.get(o['status'], o['status'])))
-        await q.edit_message_text('\n'.join(lines), reply_markup=kb_main_client()); return
 
     if data == 'c_requests':
         reqs = get_requests_by_client(uid)
         if not reqs:
-            await q.edit_message_text('Заявок не знайдено.', reply_markup=kb_main_client()); return
+            await q.edit_message_text('Заявок не знайдено.', reply_markup=client_kb()); return
         icons = {'new':'Нова','confirmed':'Пiдтверджено','in_work':'В роботi','ready':'Готово','issued':'Видано'}
         lines = ['Вашi останнi заявки:']
         for r in reversed(reqs):
             lines.append('{} | {} | {}'.format(r['date'], r['service'], icons.get(r['status'], r['status'])))
-        await q.edit_message_text('\n'.join(lines), reply_markup=kb_main_client()); return
+        await q.edit_message_text('\n'.join(lines), reply_markup=client_kb()); return
 
-    if data == 'c_contact':
-        ud['wait_client_msg'] = True
-        await q.edit_message_text('Напишiть питання — майстер вiдповiсть найближчим часом:', reply_markup=kb_cancel()); return
-
+    # Вiдповiдь клiєнту — кнопка в повiдомленнi для менеджера
     if data.startswith('reply_'):
         client_id = int(data[6:])
         ud['wait_reply_to'] = client_id
-        await q.edit_message_text('Напишiть вiдповiдь клiєнту. Бот вiдправить її вiд iменi СТО Farro:', reply_markup=kb_cancel()); return
+        await q.edit_message_text(
+            'Напишiть вiдповiдь. Claude переклад на украiнську i зробить ввiчливiшою:',
+            reply_markup=kb_cancel()); return
 
-    # Панель мастера
+    # Панель менеджера
     if not is_staff(uid):
         await q.edit_message_text('Немає доступу.'); return
 
@@ -787,7 +653,7 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         new_r = [r for r in rows[1:] if len(r)>8 and r[8]=='new']
         if not new_r:
             await q.edit_message_text('Нових заявок немає.', reply_markup=kb_staff_main()); return
-        lines = ['Новi заявки: {}'.format(len(new_r))]
+        lines = ['Новi заявки: {}\n'.format(len(new_r))]
         for r in new_r:
             lines.append('{} | {} | {} | {}'.format(r[0], r[3], r[6], r[1]))
         await q.edit_message_text('\n'.join(lines), reply_markup=kb_staff_main()); return
@@ -822,11 +688,15 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 sto_name  = row[5] if len(row)>5 else ''
                 if client_id:
                     try:
-                        await ctx.bot.send_message(chat_id=int(client_id),
-                            text='Ваш автомобiль готовий!\nАвто: {}\nПослуга: {}\n{}\nЧекаємо вас! СТО Farro'.format(car, service, sto_name),
-                            reply_markup=kb_reply_to_sto())
-                    except Exception as e: logger.error('ready: {}'.format(e))
-                await q.edit_message_text('Заявка {} готова. Клiєнта повiдомлено.'.format(rid), reply_markup=kb_staff_main())
+                        await ctx.bot.send_message(
+                            chat_id=int(client_id),
+                            text='Ваш автомобiль готовий!\nАвто: {}\nПослуга: {}\n{}\nЧекаємо вас! СТО Farro'.format(
+                                car, service, sto_name),
+                            reply_markup=kb_reply_to_manager())
+                    except Exception as e: logger.error('ready: %s', e)
+                await q.edit_message_text(
+                    'Заявка {} вiдмiчена як готова. Клiєнта повiдомлено.'.format(rid),
+                    reply_markup=kb_staff_main())
                 return
         await q.edit_message_text('Заявку не знайдено.', reply_markup=kb_staff_main()); return
 
@@ -837,9 +707,9 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not active:
             await q.edit_message_text('Активних заявок немає.', reply_markup=kb_staff_main()); return
         icons = {'new':'Нова','confirmed':'Пiдтверджено','in_work':'В роботi','ready':'Готово'}
-        lines = ['Всi активнi: {}'.format(len(active))]
+        lines = ['Всi активнi: {}\n'.format(len(active))]
         for r in active:
-            lines.append('{} | {} | {} | {}'.format(icons.get(r[8],''), r[0], r[3], r[6]))
+            lines.append('{} {} | {} | {}'.format(icons.get(r[8],''), r[0], r[3], r[6]))
         await q.edit_message_text('\n'.join(lines), reply_markup=kb_staff_main()); return
 
     if data == 's_write_client':
@@ -857,42 +727,44 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         client_tg_id = data[3:]
         ud['write_to_client_id'] = int(client_tg_id)
         ws   = get_ws('Клиенты')
-        rows = ws.get_all_values()
         cname = client_tg_id; car = ''
-        for r in rows[1:]:
+        for r in ws.get_all_values()[1:]:
             if str(r[0]).strip() == client_tg_id:
                 cname = r[1] if len(r)>1 else cname
                 car   = r[3] if len(r)>3 else ''
                 break
         ud['write_to_name'] = cname
         ud['write_to_car']  = car
-        car_str = ' ({})'.format(car) if car else ''
-        await q.edit_message_text('Клiєнт: {}{}. Оберiть тип:'.format(cname, car_str),
-                                  reply_markup=kb_write_templates()); return
+        car_s = ' ({})'.format(car) if car else ''
+        await q.edit_message_text(
+            'Клiєнт: {}{}. Оберiть тип повiдомлення:'.format(cname, car_s),
+            reply_markup=kb_write_templates()); return
 
     if data.startswith('tpl_'):
-        tpl    = data[4:]
-        cname  = ud.get('write_to_name', '')
-        car    = ud.get('write_to_car', '')
-        car_s  = ' ({})'.format(car) if car else ''
-        cid    = ud.get('write_to_client_id')
+        tpl   = data[4:]
+        cname = ud.get('write_to_name', '')
+        car   = ud.get('write_to_car', '')
+        cid   = ud.get('write_to_client_id')
+        car_s = ' ({})'.format(car) if car else ''
 
         if tpl == 'custom':
             ud['wait_custom_msg'] = True
-            await q.edit_message_text('Напишiть повiдомлення клiєнту {}{}:'.format(cname, car_s),
-                                      reply_markup=kb_cancel()); return
+            await q.edit_message_text(
+                'Напишiть повiдомлення клiєнту {}{}. Claude зробить його ввiчливiшим:'.format(cname, car_s),
+                reply_markup=kb_cancel()); return
 
         texts = {
-            'oil':   'Нагадуємо, що для вашого авто{} наближається термiн замiни моторного масла. Рекомендуємо записатися на ТО. Чекаємо вас у СТО Farro!'.format(car_s),
-            'ready': 'Ваш автомобiль{} готовий до видачi! Всi роботи виконано. Чекаємо вас у СТО Farro.'.format(car_s),
-            'price': 'Доброго дня! Хотiли уточнити деталi щодо вартостi робiт по вашому авто{}. Будь ласка, напишiть нам.'.format(car_s),
-            'extra': 'Пiд час огляду вашого авто{} ми виявили додатковi роботи якi рекомендуємо виконати. Напишiть нам — розкажемо детальнiше.'.format(car_s),
+            'oil':   'Нагадуємо — для вашого авто{} наближається термiн замiни масла. Запишiться на ТО у СТО Farro!'.format(car_s),
+            'ready': 'Ваш автомобiль{} готовий до видачi. Чекаємо вас!'.format(car_s),
+            'price': 'Хотiли уточнити вартiсть робiт по вашому авто{}. Напишiть нам.'.format(car_s),
+            'extra': 'Виявили додатковi роботи по вашому авто{}. Деталi — в нашому повiдомленнi.'.format(car_s),
         }
-
         if tpl in texts and cid:
             try:
                 await send_to_client(ctx.bot, cid, texts[tpl])
-                await q.edit_message_text('Надiслано клiєнту {}!'.format(cname), reply_markup=kb_staff_main())
+                await q.edit_message_text(
+                    'Надiслано клiєнту {}!'.format(cname),
+                    reply_markup=kb_staff_main())
             except Exception as e:
                 await q.edit_message_text('Помилка: {}'.format(e), reply_markup=kb_staff_main())
         return
@@ -903,11 +775,10 @@ def main():
     app.add_handler(CommandHandler('menu',  cmd_start))
     app.add_handler(CallbackQueryHandler(handle_cb))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
-    logger.info('СТО бот {} запущен!'.format(STO_NAME))
-    logger.info('CLAUDE_API_KEY present: {}'.format(bool(CLAUDE_API_KEY)))
-    logger.info('claude_client initialized: {}'.format(claude_client is not None))
-    logger.info('OWNER_ID: {}'.format(OWNER_ID))
-    logger.info('MASTER_IDS: {}'.format(MASTER_IDS))
+    logger.info('СТО бот %s запущен!', STO_NAME)
+    logger.info('CLAUDE_API_KEY present: %s', bool(CLAUDE_API_KEY))
+    logger.info('claude_client initialized: %s', claude_client is not None)
+    logger.info('STAFF_IDS: %s', STAFF_IDS)
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
