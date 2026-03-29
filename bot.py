@@ -77,25 +77,27 @@ SERVICE_ROUTING: Dict[str, List[int]] = {
 }
 
 def polish_master_reply(raw_text: str) -> str:
+    logger.info('polish_master_reply called. claude_client={}'.format(claude_client is not None))
     if not claude_client:
+        logger.warning('claude_client is None - CLAUDE_API_KEY not set or empty')
         return raw_text
     try:
         prompt = (
-            'Ти — ввічливий менеджер автосервісу Farro. '
-            'Майстер написав відповідь клієнту: "{}". '
-            'Перепиши цю відповідь українською мовою — красиво, ввічливо, зрозуміло, без помилок. '
-            'Зберіть зміст повідомлення майстра. '
-            'Не додавай зайвого. Відповідай тільки готовим текстом без пояснень.'
-        ).format(raw_text)
+            'Ти ввічливий менеджер автосервісу Farro. '
+            'Майстер написав відповідь клієнту: ' + raw_text + '. '
+            'Перепиши українською мовою красиво, ввічливо, зрозуміло, без помилок. '
+            'Збережи зміст. Тільки готовий текст без пояснень.'
+        )
         resp = claude_client.messages.create(
             model='claude-sonnet-4-20250514',
             max_tokens=300,
             messages=[{'role': 'user', 'content': prompt}]
         )
         result = resp.content[0].text.strip()
+        logger.info('polish result: {}'.format(result[:50]))
         return result if result else raw_text
     except Exception as e:
-        logger.error('polish_master_reply: {}'.format(e))
+        logger.error('polish_master_reply error: {}'.format(e))
         return raw_text
 
 
