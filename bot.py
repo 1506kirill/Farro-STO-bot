@@ -400,16 +400,16 @@ def get_requests_by_client(tg_id):
 # Постiйне меню внизу для клiєнта (як мессенджер)
 def reply_kb_client():
     return ReplyKeyboardMarkup([
-        ['Послуги та цiни', 'Статус авто'],
-        ['Записатися', 'Написати менеджеру'],
-    ], resize_keyboard=True, input_field_placeholder='Напишiть або оберiть дiю...')
+        ['Послуги та цiни', 'Моє авто'],
+        ['Мої заявки', 'Записатися на ремонт'],
+    ], resize_keyboard=True, input_field_placeholder='Пишiть нам — ми вiдповiмо!')
 
 # Постiйне меню внизу для менеджера
 def reply_kb_staff():
     return ReplyKeyboardMarkup([
         ['Новi заявки', 'Всi активнi'],
-        ['Авто готове', 'Написати клiєнту'],
-    ], resize_keyboard=True, input_field_placeholder='Оберiть дiю...')
+        ['Авто готове', 'Клiєнти'],
+    ], resize_keyboard=True, input_field_placeholder='Або просто вiдповiдайте клiєнту...')
 
 # Iнлайн кнопки для детального вмiсту
 def kb_sto_choice():
@@ -419,7 +419,16 @@ def kb_sto_choice():
     ])
 
 def kb_services_list(sto_key):
+    c    = CONTACTS[sto_key]
     btns = []
+    # Телефон як кнопка
+    if c.get('phone') and c['phone'] != '+380 XX XXX XX XX':
+        btns.append([InlineKeyboardButton(
+            ' Зателефонувати: ' + c['phone'],
+            url='tel:{}'.format(c['phone'].replace(' ','').replace('+','%2B')))])
+    btns.append([InlineKeyboardButton(
+        ' Вiдкрити в навiгаторi', url=c['maps'])])
+    btns.append([InlineKeyboardButton(' ─────────────────', callback_data='noop')])
     for svc in SERVICES[sto_key]:
         btns.append([InlineKeyboardButton(
             svc['icon'] + ' ' + svc['name'],
@@ -428,11 +437,18 @@ def kb_services_list(sto_key):
     return InlineKeyboardMarkup(btns)
 
 def kb_service_detail(sto_key, svc_id):
-    return InlineKeyboardMarkup([
+    c    = CONTACTS[sto_key]
+    btns = [
         [InlineKeyboardButton('Записатися на цю послугу', callback_data='book_{}_{}'.format(sto_key, svc_id))],
-        [InlineKeyboardButton('Запитати менеджера', callback_data='ask_manager')],
-        [InlineKeyboardButton('Назад до списку', callback_data='menu_{}'.format(sto_key))],
-    ])
+        [InlineKeyboardButton('Запитати менеджера',        callback_data='ask_manager')],
+    ]
+    if c.get('phone') and c['phone'] != '+380 XX XXX XX XX':
+        btns.append([InlineKeyboardButton(
+            ' ' + c['phone'],
+            url='tel:{}'.format(c['phone'].replace(' ','').replace('+','%2B')))])
+    btns.append([InlineKeyboardButton(' Навiгатор', url=c['maps'])])
+    btns.append([InlineKeyboardButton('Назад до списку', callback_data='menu_{}'.format(sto_key))])
+    return InlineKeyboardMarkup(btns)
 
 def kb_book_confirm(sto_key, svc_id):
     return InlineKeyboardMarkup([
@@ -670,12 +686,9 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text('Оберiть сервiс для запису:', reply_markup=kb_sto_choice())
         return
 
-    if 'менеджер' in text_lo or 'написати' in text_lo or 'питання' in text_lo:
-        if not is_staff(uid):
-            ud['wait_client_msg'] = True
-            await update.message.reply_text(
-                'Напишiть ваше питання — вiдповiмо найближчим часом!',
-                reply_markup=reply_kb_client()); return
+    # Клiєнт згадав менеджера - просто пiдтверджуємо що чуємо
+    if 'менеджер' in text_lo and not is_staff(uid):
+        pass  # впаде далi на загальний обробник чату
 
     # ── Менеджер: команди ────────────────────────────────────
     if is_staff(uid):
@@ -705,15 +718,17 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text('Активних заявок немає.', reply_markup=reply_kb_staff()); return
             await update.message.reply_text('Оберiть готову заявку:', reply_markup=kb); return
 
-        if 'написати' in text_lo or 'клiєнту' in text_lo:
+        if 'клiєнти' in text_lo or 'клієнти' in text_lo or 'написати' in text_lo:
             kb = kb_clients_list()
             if not kb:
                 await update.message.reply_text('Клiєнтiв не знайдено.', reply_markup=reply_kb_staff()); return
             await update.message.reply_text('Оберiть клiєнта:', reply_markup=kb); return
 
-        # Будь-яке iнше повiдомлення вiд менеджера — вважаємо що вiн хоче написати клiєнту
-        # якщо є активний контекст вiдповiдi
-        await update.message.reply_text('Оберiть дiю:', reply_markup=reply_kb_staff()); return
+        # Менеджер написав текст без контексту
+        # Нагадуємо: треба натиснути "Вiдповiсти" пiд повiдомленням клiєнта
+        msg = 'Щоб вiдповiсти — натиснiть кнопку Вiдповiсти клiєнту пiд його повiдомленням. Або оберiть клiєнта через Клiєнти.'
+        await update.message.reply_text(msg, reply_markup=reply_kb_staff())
+        return
 
     # ── Будь-яке повiдомлення вiд клiєнта — це чат з менеджером ──
     client = get_client(uid)
