@@ -460,7 +460,7 @@ def kb_cancel():
     return InlineKeyboardMarkup([[InlineKeyboardButton('Скасувати', callback_data='cancel')]])
 
 def kb_reply_manager():
-    return InlineKeyboardMarkup([[InlineKeyboardButton('Написати менеджеру', callback_data='ask_manager')]])
+    return None  # Клiєнт просто пише в чат
 
 def kb_reply_client(client_id):
     return InlineKeyboardMarkup([[InlineKeyboardButton(
@@ -512,7 +512,7 @@ async def send_to_client(bot, client_id, text):
     await bot.send_message(
         chat_id=int(client_id),
         text='Повiдомлення вiд СТО Farro:\n\n' + text,
-        reply_markup=kb_reply_manager())
+)
 
 async def notify_staff(bot, message, client_id=None):
     kb = kb_reply_client(client_id) if client_id else None
@@ -642,7 +642,7 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         await ctx.bot.send_message(
                             chat_id=int(cid),
                             text='Ваш запис пiдтверджено!\nЗаявка: {}\nПослуга: {}\nЧекаємо вас!'.format(rid, service),
-                            reply_markup=kb_reply_manager())
+                            )
                     except Exception as e: logger.error('confirm: %s', e)
                 await update.message.reply_text('Запис {} пiдтверджено.'.format(rid), reply_markup=reply_kb_staff())
                 return
@@ -736,11 +736,6 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     car    = client['car']  if client else 'не вказано'
     fwd    = 'Клiєнт пише:\n{} | {}\n\n{}'.format(cname, car, text)
     await notify_staff(ctx.bot, fwd, client_id=uid)
-    # Вiдповiдаємо клiєнту що повiдомлення отримано
-    await update.message.reply_text(
-        'Дякуємо! Менеджер прочитав ваше повiдомлення i вiдповiсть найближчим часом.',
-        reply_markup=reply_kb_client())
-
 async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q    = update.callback_query
     uid  = q.from_user.id
@@ -820,7 +815,7 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if data.startswith('reply_'):
         client_id = int(data[6:])
         ud['wait_reply_to'] = client_id
-        await q.edit_message_text('Напишiть вiдповiдь клiєнту. Claude переклад на украiнську:'); return
+        await q.edit_message_text('Пишiть:'); return
 
     # Готовнiсть авто
     if data.startswith('mark_ready_'):
@@ -839,7 +834,7 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                             chat_id=int(cid),
                             text='Ваш автомобiль готовий!\nАвто: {}\nПослуга: {}\n{}\nЧекаємо вас!'.format(
                                 car, service, sto_name),
-                            reply_markup=kb_reply_manager())
+                            )
                     except Exception as e: logger.error('ready: %s', e)
                 await q.edit_message_text('Заявка {} вiдмiчена як готова. Клiєнта повiдомлено.'.format(rid)); return
         await q.edit_message_text('Заявку не знайдено.'); return
