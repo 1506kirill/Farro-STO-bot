@@ -433,7 +433,7 @@ def kb_services_list(sto_key):
         'Вiдкрити в навiгаторi', url=c['maps'])])
     for svc in SERVICES[sto_key]:
         btns.append([InlineKeyboardButton(
-            svc['icon'] + ' ' + svc['name'],
+            svc['name'],
             callback_data='svc_{}_{}'.format(sto_key, svc['id']))])
     btns.append([InlineKeyboardButton('Запитати менеджера', callback_data='ask_manager')])
     return InlineKeyboardMarkup(btns)
