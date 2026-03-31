@@ -601,32 +601,27 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # ── Вiдповiдь менеджера клiєнту ───────────────────────────
     if ud.get('wait_reply_to'):
         client_id = ud.pop('wait_reply_to')
-        await update.message.reply_text('Обробляю...')
-        polished = polish_reply(text)
+        polished  = polish_reply(text)
         try:
             await send_to_client(ctx.bot, client_id, polished)
-            await update.message.reply_text(
-                'Надiслано.\n\nВаш текст: ' + text + '\n\nНадiслано: ' + polished,
-                reply_markup=reply_kb_staff())
+            await update.message.reply_text('Вiдправлено', reply_markup=reply_kb_staff())
         except Exception as e:
             await update.message.reply_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
         return
 
-    # ── Свiй текст клiєнту ────────────────────────────────────
+
     if ud.get('wait_custom'):
         ud.pop('wait_custom')
         client_id = ud.get('write_to_id')
         cname     = ud.get('write_to_name','')
-        await update.message.reply_text('Обробляю...')
-        polished = polish_reply(text)
+        polished  = polish_reply(text)
         try:
             await send_to_client(ctx.bot, client_id, polished)
-            await update.message.reply_text(
-                'Надiслано {}.\n\nВаш текст: '.format(cname) + text + '\n\nНадiслано: ' + polished,
-                reply_markup=reply_kb_staff())
+            await update.message.reply_text('Вiдправлено ' + cname, reply_markup=reply_kb_staff())
         except Exception as e:
             await update.message.reply_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
         return
+
 
     # ── Пiдтвердження запису ──────────────────────────────────
     if ud.get('wait_confirm'):
@@ -879,9 +874,9 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if tpl in texts and cid:
             try:
                 await send_to_client(ctx.bot, cid, texts[tpl])
-                await q.edit_message_text('Надiслано клiєнту {}!'.format(cname))
+                await q.edit_message_text('Вiдправлено ' + cname, reply_markup=reply_kb_staff())
             except Exception as e:
-                await q.edit_message_text('Помилка: {}'.format(e))
+                await q.edit_message_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
         return
 
 def main():
