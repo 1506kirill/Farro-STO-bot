@@ -288,26 +288,31 @@ def get_client(tg_id):
     for row in ws.get_all_values()[1:]:
         if str(row[0]).strip() == str(tg_id):
             return {
-                'tg_id': row[0], 'name': row[1] if len(row)>1 else '',
-                'phone': row[2] if len(row)>2 else '',
-                'car':   row[3] if len(row)>3 else '',
-                'model': row[4] if len(row)>4 else '',
-                'ins_end': row[5] if len(row)>5 else '',
-                'oil_odo': row[6] if len(row)>6 else '',
-                'oil_date':row[7] if len(row)>7 else '',
-                'grm_odo': row[8] if len(row)>8 else '',
-                'grm_date':row[9] if len(row)>9 else '',
+                'tg_id':    row[0],
+                'name':     row[1] if len(row)>1 else '',
+                'phone':    row[2] if len(row)>2 else '',
+                'car':      row[3] if len(row)>3 else '',
+                'model':    row[4] if len(row)>4 else '',
+                # F=5 - дата реєстрацiї (пропускаємо)
+                'ins_end':  row[6] if len(row)>6 else '',
+                'oil_odo':  row[7] if len(row)>7 else '',
+                'oil_date': row[8] if len(row)>8 else '',
+                'grm_odo':  row[9] if len(row)>9 else '',
+                'grm_date': row[10] if len(row)>10 else '',
             }
     return None
 
 def save_client(tg_id, data: dict):
     ws = get_ws('Клиенты')
+    # A=tg_id, B=name, C=phone, D=car, E=model, F=reg_date,
+    # G=ins_end, H=oil_odo, I=oil_date, J=grm_odo, K=grm_date
     row = [
         str(tg_id),
         data.get('name',''), data.get('phone',''),
         data.get('car',''), data.get('model',''),
+        today_str(),  # F - дата реєстрацiї/оновлення
         data.get('ins_end',''), data.get('oil_odo',''), data.get('oil_date',''),
-        data.get('grm_odo',''), data.get('grm_date',''), today_str(),
+        data.get('grm_odo',''), data.get('grm_date',''),
     ]
     rows = ws.get_all_values()
     for i, r in enumerate(rows[1:], start=2):
