@@ -27,19 +27,23 @@ STAFF_IDS     = list(set(MASTER_IDS + ([OWNER_ID] if OWNER_ID else [])))
 claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
 
 # Контакти СТО
+PHONES = [
+    ('(067) 398-42-92', '+380673984292'),
+    ('(050) 857-20-10', '+380508572010'),
+    ('(073) 264-62-04', '+380732646204'),
+]
+
 CONTACTS = {
     'sto': {
         'name':    'СТО Farro',
         'address': 'вул. Богдана Хмельницького 4а (лiвий берег)',
         'maps':    'https://maps.app.goo.gl/yzXq7rwV2sB9SkRj9',
-        'phone':   '+380 XX XXX XX XX',
         'hours':   'ПН-ПТ 09:00-18:00',
     },
     'body': {
         'name':    'Кузовний сервiс Farro',
         'address': 'вул. Павла Чубинського 2а',
         'maps':    'https://maps.app.goo.gl/xe7u4vD1tvSg6buy6',
-        'phone':   '+380 XX XXX XX XX',
         'hours':   'ПН-ПТ 09:00-18:00',
     },
 }
@@ -414,21 +418,19 @@ def reply_kb_staff():
 # Iнлайн кнопки для детального вмiсту
 def kb_sto_choice():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Кузовний сервiс\nвул. Павла Чубинського 2а', callback_data='menu_body')],
-        [InlineKeyboardButton('СТО\nвул. Богдана Хмельницького 4а (лiвий берег)', callback_data='menu_sto')],
+        [InlineKeyboardButton('Кузовний сервiс (вул. Павла Чубинського 2а)', callback_data='menu_body')],
+        [InlineKeyboardButton('СТО (вул. Богдана Хмельницького 4а, лiвий берег)', callback_data='menu_sto')],
     ])
 
 def kb_services_list(sto_key):
     c    = CONTACTS[sto_key]
     btns = []
-    # Телефон як кнопка
-    if c.get('phone') and c['phone'] != '+380 XX XXX XX XX':
+    # Телефони як кнопки для дзвiнка
+    for label, number in PHONES:
         btns.append([InlineKeyboardButton(
-            ' Зателефонувати: ' + c['phone'],
-            url='tel:{}'.format(c['phone'].replace(' ','').replace('+','%2B')))])
+            'Зателефонувати ' + label, url='tel:' + number)])
     btns.append([InlineKeyboardButton(
-        ' Вiдкрити в навiгаторi', url=c['maps'])])
-    btns.append([InlineKeyboardButton(' ─────────────────', callback_data='noop')])
+        'Вiдкрити в навiгаторi', url=c['maps'])])
     for svc in SERVICES[sto_key]:
         btns.append([InlineKeyboardButton(
             svc['icon'] + ' ' + svc['name'],
@@ -442,11 +444,10 @@ def kb_service_detail(sto_key, svc_id):
         [InlineKeyboardButton('Записатися на цю послугу', callback_data='book_{}_{}'.format(sto_key, svc_id))],
         [InlineKeyboardButton('Запитати менеджера',        callback_data='ask_manager')],
     ]
-    if c.get('phone') and c['phone'] != '+380 XX XXX XX XX':
+    for label, number in PHONES:
         btns.append([InlineKeyboardButton(
-            ' ' + c['phone'],
-            url='tel:{}'.format(c['phone'].replace(' ','').replace('+','%2B')))])
-    btns.append([InlineKeyboardButton(' Навiгатор', url=c['maps'])])
+            'Зателефонувати ' + label, url='tel:' + number)])
+    btns.append([InlineKeyboardButton('Навiгатор', url=c['maps'])])
     btns.append([InlineKeyboardButton('Назад до списку', callback_data='menu_{}'.format(sto_key))])
     return InlineKeyboardMarkup(btns)
 
@@ -538,10 +539,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     client = get_client(uid)
-    greeting = 'З поверненням, {}!'.format(client['name']) if client else 'Вiтаємо в СТО Farro!'
-    await update.message.reply_text(
-        greeting + '\n\nОберiть дiю або просто напишiть нам ',
-        reply_markup=reply_kb_client())
+    if client:
+        greeting = 'З поверненням, {}! Оберiть пункт меню або просто напишiть нам.'.format(client['name'])
+    else:
+        greeting = 'Вiтаємо в СТО Farro! Оберiть пункт меню нижче або просто напишiть ваше питання.'
+    await update.message.reply_text(greeting, reply_markup=reply_kb_client())
 
 async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
@@ -604,7 +606,7 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         polished  = polish_reply(text)
         try:
             await send_to_client(ctx.bot, client_id, polished)
-            await update.message.reply_text('Вiдправлено', reply_markup=reply_kb_staff())
+
         except Exception as e:
             await update.message.reply_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
         return
@@ -617,7 +619,7 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         polished  = polish_reply(text)
         try:
             await send_to_client(ctx.bot, client_id, polished)
-            await update.message.reply_text('Вiдправлено ' + cname, reply_markup=reply_kb_staff())
+
         except Exception as e:
             await update.message.reply_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
         return
@@ -874,7 +876,7 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if tpl in texts and cid:
             try:
                 await send_to_client(ctx.bot, cid, texts[tpl])
-                await q.edit_message_text('Вiдправлено ' + cname, reply_markup=reply_kb_staff())
+                await q.edit_message_text('OK', reply_markup=reply_kb_staff())
             except Exception as e:
                 await q.edit_message_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
         return
