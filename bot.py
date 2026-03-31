@@ -425,12 +425,7 @@ def kb_sto_choice():
 def kb_services_list(sto_key):
     c    = CONTACTS[sto_key]
     btns = []
-    # Телефони як кнопки для дзвiнка
-    for label, number in PHONES:
-        btns.append([InlineKeyboardButton(
-            'Зателефонувати ' + label, url='tel:' + number)])
-    btns.append([InlineKeyboardButton(
-        'Вiдкрити в навiгаторi', url=c['maps'])])
+    btns.append([InlineKeyboardButton('Вiдкрити в навiгаторi', url=c['maps'])])
     for svc in SERVICES[sto_key]:
         btns.append([InlineKeyboardButton(
             svc['name'],
@@ -444,9 +439,6 @@ def kb_service_detail(sto_key, svc_id):
         [InlineKeyboardButton('Записатися на цю послугу', callback_data='book_{}_{}'.format(sto_key, svc_id))],
         [InlineKeyboardButton('Запитати менеджера',        callback_data='ask_manager')],
     ]
-    for label, number in PHONES:
-        btns.append([InlineKeyboardButton(
-            'Зателефонувати ' + label, url='tel:' + number)])
     btns.append([InlineKeyboardButton('Навiгатор', url=c['maps'])])
     btns.append([InlineKeyboardButton('Назад до списку', callback_data='menu_{}'.format(sto_key))])
     return InlineKeyboardMarkup(btns)
@@ -753,12 +745,13 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         sto_key = data[5:]
         c       = CONTACTS[sto_key]
         phones  = '  '.join(p[0] for p in PHONES)
+        phones_txt = '  '.join(p[0] for p in PHONES)
         text    = ('{}\n\n'
                    'Адреса: {}\n'
                    'Графiк: {}\n'
                    'Тел.: {}\n\n'
                    'Оберiть послугу:').format(
-            c['name'], c['address'], c['hours'], phones)
+            c['name'], c['address'], c['hours'], phones_txt)
         await q.edit_message_text(text, reply_markup=kb_services_list(sto_key)); return
 
     # Деталi послуги
@@ -770,12 +763,13 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not svc:
             await q.edit_message_text('Послугу не знайдено.'); return
         c = CONTACTS[sto_key]
-        text = ('{} {}\n\n{}\n\n'
+        phones_txt = '  '.join(p[0] for p in PHONES)
+        text = ('{}\n\n{}\n\n'
                 'Адреса: {}\n'
-                'Карти: {}\n'
-                'Графiк: {}').format(
-            svc['icon'], svc['name'], svc['desc'],
-            c['address'], c['maps'], c['hours'])
+                'Графiк: {}\n'
+                'Тел.: {}').format(
+            svc['name'], svc['desc'],
+            c['address'], c['hours'], phones_txt)
         await q.edit_message_text(text, reply_markup=kb_service_detail(sto_key, svc_id)); return
 
     # Запис на конкретну послугу
