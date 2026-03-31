@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 import gspread
 import anthropic
 from google.oauth2.service_account import Credentials
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (
     Application, MessageHandler, CommandHandler,
     CallbackQueryHandler, filters, ContextTypes,
@@ -26,12 +26,14 @@ CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY')
 STAFF_IDS     = list(set(MASTER_IDS + ([OWNER_ID] if OWNER_ID else [])))
 claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
 
-# Контакти СТО
-PHONES = [
-    ('(067) 398-42-92', '380673984292'),
-    ('(050) 857-20-10', '380508572010'),
-    ('(073) 264-62-04', '380732646204'),
-]
+PHONES_TEXT = '(067) 398-42-92    (050) 857-20-10    (073) 264-62-04'
+
+# Шляхи до фото фасадiв (завантажуються локально при деплої)
+PHOTO_BODY_PATH = '/app/photo_body.jpg'
+PHOTO_STO_PATH  = '/app/photo_sto.jpg'
+
+# file_id кешуються пiсля першого завантаження
+_photo_cache = {}
 
 CONTACTS = {
     'sto': {
@@ -48,204 +50,168 @@ CONTACTS = {
     },
 }
 
-# Послуги з детальним описом
 SERVICES = {
     'sto': [
         {
-            'id':    'gbo',
-            'name':  'ГБО (газове обладнання)',
-            'icon':  '',
-            'desc':  ('Встановлення та обслуговування газобалонного обладнання (ГБО).\n\n'
-                      'Що входить:\n'
-                      'Встановлення ГБО 4-го та 5-го поколiння\n'
-                      'Налаштування та калiбрування\n'
-                      'Технiчне обслуговування системи\n'
-                      'Замiна фiльтрiв та редуктора\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Встановлення ГБО 4-го поколiння — вiд 8 000 грн\n'
-                      'Встановлення ГБО 5-го поколiння — вiд 12 000 грн\n'
-                      'ТО системи ГБО — вiд 800 грн\n\n'
-                      'Детальнiше: https://farro.ua/install/'),
+            'id':   'gbo',
+            'name': 'ГБО — газове обладнання',
+            'text': (
+                'Встановлення та обслуговування ГБО\n\n'
+                'Встановлення ГБО на 4 цилiндри — вiд 19 600 грн\n'
+                'Встановлення ГБО на 6 цилiндрiв — вiд 30 500 грн\n'
+                'Планове ТО ГБО — вiд 650 грн\n'
+                'Комп\'ютерна дiагностика — 400 грн\n'
+                'Сертифiкацiя ГБО (вписання в техпаспорт) — 3 000 грн\n\n'
+                'У нас завжди все в наявностi. Найбiльший склад ГБО в областi.\n\n'
+                'Детальнiше: https://farro.ua/install/'
+            ),
         },
         {
-            'id':    'cond',
-            'name':  'Автокондицiонери',
-            'icon':  '',
-            'desc':  ('Дiагностика, заправка та ремонт системи кондицiонування.\n\n'
-                      'Що входить:\n'
-                      'Дiагностика системи кондицiонування\n'
-                      'Заправка фреоном\n'
-                      'Замiна компресора, конденсатора, радiатора\n'
-                      'Замiна салонного фiльтра\n'
-                      'Антибактерiальна обробка\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Дiагностика — вiд 200 грн\n'
-                      'Заправка фреоном — вiд 500 грн\n'
-                      'Ремонт — вiд 800 грн\n\n'
-                      'Детальнiше: https://farro.ua/kondicionery/'),
+            'id':   'cond',
+            'name': 'Автокондицiонери',
+            'text': (
+                'Дiагностика та заправка кондицiонерiв\n\n'
+                'Пiдключення та дiагностика — 400 грн\n'
+                '1 г фреону — 1,8 грн\n'
+                '1 г компресорного масла — 10 грн\n\n'
+                'Також виконуємо:\n'
+                'Ремонт трубок кондицiонера\n'
+                'Пошук та усунення витоку фреону\n'
+                'Промивка системи кондицiонування\n\n'
+                'Важливо: точна кiлькiсть фреону визначається лише пiсля '
+                'вiдкачування та зважування — по телефону це неможливо розрахувати.\n\n'
+                'Детальнiше: https://farro.ua/kondicionery/'
+            ),
         },
         {
-            'id':    'engine',
-            'name':  'Двигуни',
-            'icon':  '',
-            'desc':  ('Дiагностика та ремонт двигунiв будь-якої складностi.\n\n'
-                      'Що входить:\n'
-                      'Комп\'ютерна дiагностика\n'
-                      'Замiна масла та фiльтрiв\n'
-                      'Ремонт ГРМ\n'
-                      'Капiтальний ремонт двигуна\n'
-                      'Промивка системи охолодження\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Дiагностика — вiд 300 грн\n'
-                      'Замiна масла — вiд 300 грн\n'
-                      'Ремонт ГРМ — вiд 1 500 грн\n\n'
-                      'Детальнiше: https://farro.ua/kondicionery/'),
+            'id':   'engine',
+            'name': 'Двигуни',
+            'text': (
+                'Дiагностика та ремонт двигунiв\n\n'
+                'Замiна моторного масла — 400 грн\n'
+                'Комп\'ютерна дiагностика — 400 грн\n'
+                'Замiна ГРМ — вiд 3 500 грн\n'
+                'Регулювання зазорiв клапанiв — вiд 1 500 грн\n'
+                'Дiагностика ендоскопом — вiд 1 500 грн\n'
+                'Замiр компресiї в цилiндрах — вiд 1 200 грн\n\n'
+                'Детальнiше: https://farro.ua/kondicionery/'
+            ),
         },
         {
-            'id':    'wheel',
-            'name':  'Розвал-сходження 3D',
-            'icon':  '',
-            'desc':  ('Точне регулювання кутiв встановлення колiс на 3D стендi.\n\n'
-                      'Що входить:\n'
-                      'Перевiрка та регулювання кутiв коренебальних коренiв\n'
-                      'Перевiрка рульового керування\n'
-                      'Дiагностика пiдвiски\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Розвал-сходження 3D — 800 грн\n'
-                      'З урахуванням регулювання — вiд 1 000 грн\n\n'
-                      'Детальнiше: https://farro.ua/razval-shozhdenie/'),
+            'id':   'wheel',
+            'name': 'Розвал-сходження 3D',
+            'text': (
+                'Точне регулювання кутiв коленiс на 3D стендi\n\n'
+                'Одна вiсь — вiд 600 грн\n'
+                'Двi осi — 1 000 грн\n\n'
+                'Детальнiше: https://farro.ua/razval-shozhdenie/'
+            ),
         },
         {
-            'id':    'cool',
-            'name':  'Промивка системи охолодження',
-            'icon':  '',
-            'desc':  ('Промивка та замiна антифризу системи охолодження двигуна.\n\n'
-                      'Що входить:\n'
-                      'Промивка системи спецiальним засобом\n'
-                      'Замiна антифризу\n'
-                      'Перевiрка термостата\n'
-                      'Перевiрка герметичностi системи\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Промивка + антифриз — вiд 600 грн\n\n'
-                      'Детальнiше: https://farro.ua/promyvka-ohlazhdeniya/'),
+            'id':   'cool',
+            'name': 'Промивка системи охолодження',
+            'text': (
+                'Промивка та замiна антифризу\n\n'
+                'Замiна антифризу — вiд 600 грн\n'
+                'Пошук витоку антифризу — 700 грн\n'
+                'Промивка радiатора пiчки — вiд 1 700 грн\n'
+                'Промивка всiєї системи охолодження — вiд 4 000 грн\n\n'
+                'Детальнiше: https://farro.ua/promyvka-ohlazhdeniya/'
+            ),
         },
         {
-            'id':    'lights',
-            'name':  'Ремонт фар та бамперiв',
-            'icon':  '',
-            'desc':  ('Полiрування, ремонт та замiна фар i бамперiв.\n\n'
-                      'Що входить:\n'
-                      'Полiрування та вiдновлення прозоростi фар\n'
-                      'Замiна лiнз та свiтлодiодiв\n'
-                      'Ремонт та фарбування бамперiв\n'
-                      'Замiна пiдсилювача бампера\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Полiрування фар — вiд 300 грн/шт\n'
-                      'Ремонт бампера — вiд 500 грн\n\n'
-                      'Детальнiше: https://farro.ua/remont-far-i-bamperov/'),
+            'id':   'lights',
+            'name': 'Ремонт фар та бамперiв',
+            'text': (
+                'Полiрування та ремонт фар i бамперiв\n\n'
+                'Полiрування однiєї фари — 1 500 грн\n'
+                'Пайка середньої трiщини — 1 000 грн\n'
+                'Вiдновлення вiдсутнього вуха фари — вiд 1 000 грн\n\n'
+                'Детальнiше: https://farro.ua/remont-far-i-bamperov/'
+            ),
         },
         {
-            'id':    'suspension',
-            'name':  'Ремонт ходової',
-            'icon':  '',
-            'desc':  ('Дiагностика та ремонт ходової частини автомобiля.\n\n'
-                      'Що входить:\n'
-                      'Дiагностика пiдвiски на пiдйомнику\n'
-                      'Замiна амортизаторiв\n'
-                      'Замiна кульових опор, сайлентблокiв\n'
-                      'Замiна рульових наконечникiв i тяг\n'
-                      'Замiна гальмiвних колодок та дискiв\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Дiагностика — безкоштовно при ремонтi\n'
-                      'Замiна амортизаторiв — вiд 400 грн/шт\n'
-                      'Замiна кульових — вiд 300 грн/шт\n\n'
-                      'Детальнiше: https://farro.ua/remont-hodovoj/'),
+            'id':   'suspension',
+            'name': 'Ремонт ходової',
+            'text': (
+                'Дiагностика та ремонт ходової частини\n\n'
+                'Дiагностика ходової — 300 грн\n'
+                'Замiна переднiх колодок — 600 грн\n'
+                'Замiна одного амортизатора або пружини — 1 200 грн\n'
+                'Замiна ступицi — 700 грн\n'
+                'Зняття одного важеля — вiд 500 грн\n'
+                'Замiна одного сайлентблока — вiд 350 грн\n'
+                'Замiна шарової опори — вiд 350 грн\n\n'
+                'Детальнiше: https://farro.ua/remont-hodovoj/'
+            ),
         },
         {
-            'id':    'exhaust',
-            'name':  'Вихлопнi системи',
-            'icon':  '',
-            'desc':  ('Дiагностика та ремонт системи вихлопу.\n\n'
-                      'Що входить:\n'
-                      'Дiагностика герметичностi системи\n'
-                      'Замiна глушника, резонатора\n'
-                      'Замiна каталiзатора\n'
-                      'Зварювальнi роботи на системi вихлопу\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Замiна глушника — вiд 800 грн\n'
-                      'Зварювання — вiд 400 грн\n\n'
-                      'Детальнiше: https://farro.ua/remont-vyhlopnoj/'),
+            'id':   'exhaust',
+            'name': 'Вихлопнi системи',
+            'text': (
+                'Дiагностика та ремонт системи вихлопу\n\n'
+                'Дiагностика вихлопної системи — 200 грн\n'
+                'Замiна гофри — вiд 1 200 грн\n\n'
+                'Детальнiше: https://farro.ua/remont-vyhlopnoj/'
+            ),
         },
         {
-            'id':    'other_sto',
-            'name':  'Iнше',
-            'icon':  '',
-            'desc':  'Маєте iнше питання? Напишiть нам — розберемось!',
+            'id':   'diag',
+            'name': 'Дiагностика перед купiвлею авто',
+            'text': (
+                'Комплексна перевiрка авто перед покупкою\n\n'
+                'Дiагностика ходової — 300 грн\n'
+                'Дiагностика ЛКП — 700 грн\n'
+                'Дiагностика ендоскопом — вiд 1 500 грн\n'
+                'Дiагностика кондицiонера — 700 грн\n'
+                'Комп\'ютерна дiагностика — 400 грн\n'
+                'Дiагностика ГБО — 400 грн'
+            ),
         },
     ],
     'body': [
         {
-            'id':    'riht',
-            'name':  'Рихтування авто',
-            'icon':  '',
-            'desc':  ('Вiдновлення геометрiї кузова пiсля ДТП або механiчних пошкоджень.\n\n'
-                      'Що входить:\n'
-                      'Дiагностика пошкоджень\n'
-                      'Рихтування на стапелi\n'
-                      'Вiдновлення геометрiї кузова\n'
-                      'Пiдготовка пiд фарбування\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Рихтування крила — вiд 500 грн\n'
-                      'Рихтування дверей — вiд 700 грн\n'
-                      'Рихтування капота — вiд 800 грн\n'
-                      'Складнi деформацiї — за оцiнкою\n\n'
-                      'Детальнiше: https://farro.ua/rihtovka-avto/'),
+            'id':   'riht',
+            'name': 'Рихтування авто',
+            'text': (
+                'Вiдновлення геометрiї кузова\n\n'
+                'Замiна порога — вiд 3 000 грн\n'
+                'Замiна полотна даху — вiд 20 000 грн\n'
+                'Витяжка лонжерона — вiд 10 000 грн\n'
+                'Рихтування порога пiсля удару об бордюр — вiд 2 000 грн\n'
+                'Замiна лобового скла — 3 000 грн\n\n'
+                'Детальнiше: https://farro.ua/rihtovka-avto/'
+            ),
         },
         {
-            'id':    'paint',
-            'name':  'Покраска авто',
-            'icon':  '',
-            'desc':  ('Професiйна покраска автомобiля з пiдбором кольору.\n\n'
-                      'Що входить:\n'
-                      'Пiдбiр кольору по коду\n'
-                      'Пiдготовка поверхнi\n'
-                      'Нанесення ґрунту\n'
-                      'Покраска з полiруванням\n'
-                      'Захисне лакове покриття\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Покраска елемента — вiд 1 500 грн\n'
-                      'Повна покраска авто — вiд 15 000 грн\n'
-                      'Локальне фарбування — вiд 600 грн\n\n'
-                      'Детальнiше: https://farro.ua/pokraska-avto/'),
+            'id':   'paint',
+            'name': 'Покраска авто',
+            'text': (
+                'Професiйна покраска з пiдбором кольору\n\n'
+                'Покраска однiєї деталi — 4 500 грн + матерiали\n'
+                'Покраска однiєї деталi трьохшаровою фарбою — 6 000 грн + матерiали\n'
+                'Повний перефарб авто — вiд 70 000 грн + матерiали\n\n'
+                'Важливо: кiлькiсть та вартiсть матерiалiв розраховує лише маляр '
+                'пiсля огляду авто — по телефону визначити неможливо.\n\n'
+                'Детальнiше: https://farro.ua/pokraska-avto/'
+            ),
         },
         {
-            'id':    'pdr',
-            'name':  'Видалення вм\'ятин PDR',
-            'icon':  '',
-            'desc':  ('Видалення вм\'ятин без покраски методом PDR (Paintless Dent Repair).\n\n'
-                      'Що входить:\n'
-                      'Дiагностика пошкоджень\n'
-                      'Видалення вм\'ятин без покраски\n'
-                      'Пiдходить для вм\'ятин без пошкодження лакофарбового покриття\n\n'
-                      'Переваги PDR:\n'
-                      'Зберiгається оригiнальне покриття\n'
-                      'Швидко — вiд 1 години\n'
-                      'Значно дешевше фарбування\n\n'
-                      'Орiєнтовна вартiсть:\n'
-                      'Невелика вм\'ятина — вiд 600 грн\n'
-                      'Середня вм\'ятина — вiд 1 000 грн\n'
-                      'Пошкодження вiд градю — вiд 3 000 грн\n\n'
-                      'Детальнiше: https://farro.ua/rihtovka-avto/'),
+            'id':   'pdr',
+            'name': 'Видалення вм\'ятин PDR',
+            'text': (
+                'Видалення вм\'ятин без покраски\n\n'
+                'Невелика вм\'ятина — вiд 600 грн\n'
+                'Середня вм\'ятина — вiд 1 000 грн\n'
+                'Пошкодження вiд граду — вiд 3 000 грн\n\n'
+                'PDR зберiгає оригiнальне лакофарбове покриття. '
+                'Пiдходить для вм\'ятин без пошкодження фарби.\n\n'
+                'Детальнiше: https://farro.ua/rihtovka-avto/'
+            ),
         },
     ],
 }
 
-STO_INFO = {
-    'sto':  {'name': CONTACTS['sto']['name'],  'services': SERVICES['sto']},
-    'body': {'name': CONTACTS['body']['name'], 'services': SERVICES['body']},
-}
-
-# 26 машин автопарку
 FLEET_CARS = {
     '0418':'АЕ0418ОР','2993':'АЕ2993РI','7935':'AE7935PI',
     '3021':'КА3021ЕО','9489':'КА9489ЕР','7121':'АЕ7121ТА',
@@ -259,38 +225,18 @@ FLEET_CARS = {
 }
 
 CAR_NAMES = {
-    'камри':'Toyota Camry','кемрi':'Toyota Camry','кемри':'Toyota Camry',
-    'прадо':'Toyota Land Cruiser Prado','прадiк':'Toyota Land Cruiser Prado',
-    'rav4':'Toyota RAV4','рав4':'Toyota RAV4','рав':'Toyota RAV4',
-    'крузак':'Toyota Land Cruiser','хайлендер':'Toyota Highlander',
-    'корола':'Toyota Corolla','ярис':'Toyota Yaris','хайс':'Toyota HiAce',
-    'октавiя':'Skoda Octavia','октавия':'Skoda Octavia','суперб':'Skoda Superb',
-    'фабiя':'Skoda Fabia','кодiак':'Skoda Kodiaq','карок':'Skoda Karoq',
+    'камри':'Toyota Camry','кемрi':'Toyota Camry','прадо':'Toyota Land Cruiser Prado',
+    'прадiк':'Toyota Land Cruiser Prado','рав4':'Toyota RAV4','крузак':'Toyota Land Cruiser',
+    'октавiя':'Skoda Octavia','октавия':'Skoda Octavia','фабiя':'Skoda Fabia',
     'пассат':'Volkswagen Passat','тiгуан':'Volkswagen Tiguan','гольф':'Volkswagen Golf',
-    'поло':'Volkswagen Polo','туарег':'Volkswagen Touareg',
-    'транспортер':'Volkswagen Transporter','шаран':'Volkswagen Sharan',
-    'бмв':'BMW','bmw':'BMW','бумер':'BMW','трiйка':'BMW 3 Series',
-    'пятiрка':'BMW 5 Series','iкс5':'BMW X5','x5':'BMW X5','iкс3':'BMW X3',
-    'мерс':'Mercedes-Benz','мерседес':'Mercedes-Benz','гелик':'Mercedes-Benz G-Class',
-    'вiто':'Mercedes-Benz Vito','спрiнтер':'Mercedes-Benz Sprinter',
-    'аудi':'Audi','audi':'Audi','а4':'Audi A4','а6':'Audi A6','ку7':'Audi Q7',
-    'хундай':'Hyundai','туксон':'Hyundai Tucson','елантра':'Hyundai Elantra',
-    'спортаж':'Kia Sportage','сiд':'Kia Ceed','рiо':'Kia Rio','оптима':'Kia Optima',
-    'дастер':'Renault Duster','логан':'Renault Logan','каптур':'Renault Captur',
-    'фокус':'Ford Focus','куга':'Ford Kuga','транзит':'Ford Transit',
-    'астра':'Opel Astra','авео':'Chevrolet Aveo','круз':'Chevrolet Cruze',
-    'аутлендер':'Mitsubishi Outlander','паджеро':'Mitsubishi Pajero',
+    'бмв':'BMW','бумер':'BMW','мерс':'Mercedes-Benz','гелик':'Mercedes-Benz G-Class',
+    'аудi':'Audi','хундай':'Hyundai','туксон':'Hyundai Tucson','спортаж':'Kia Sportage',
+    'дастер':'Renault Duster','фокус':'Ford Focus','астра':'Opel Astra',
     'кашкай':'Nissan Qashqai','рог':'Nissan Rogue','джук':'Nissan Juke',
-    'iкстрейл':'Nissan X-Trail','лiф':'Nissan Leaf',
-    'мазда':'Mazda','cx5':'Mazda CX-5','хонда':'Honda','civic':'Honda Civic',
-    'accord':'Honda Accord','crv':'Honda CR-V',
-    'форестер':'Subaru Forester','iмпреза':'Subaru Impreza','аутбек':'Subaru Outback',
-    'лексус':'Lexus','rx':'Lexus RX','кайен':'Porsche Cayenne',
-    'рейндж':'Range Rover','дефендер':'Land Rover Defender',
-    'вольво':'Volvo','пежо':'Peugeot','сiтроен':'Citroen',
-    'ланос':'Daewoo Lanos','сенс':'Daewoo Sens','нива':'Lada Niva',
-    'теслa':'Tesla','tesla':'Tesla','уаз':'UAZ','буханка':'UAZ-452',
-    'джилi':'Geely','черi':'Chery','чероки':'Jeep Cherokee',
+    'лiф':'Nissan Leaf','мазда':'Mazda','хонда':'Honda','форестер':'Subaru Forester',
+    'лексус':'Lexus','кайен':'Porsche Cayenne','рейндж':'Range Rover',
+    'вольво':'Volvo','теслa':'Tesla','tesla':'Tesla','ланос':'Daewoo Lanos',
+    'сенс':'Daewoo Sens','нива':'Lada Niva','уаз':'UAZ',
 }
 
 def normalize_car(text):
@@ -302,12 +248,6 @@ def normalize_car(text):
     digits = re.sub(r'[^0-9]', '', t)
     if digits in FLEET_CARS: return FLEET_CARS[digits]
     return text.strip().title()
-
-def resolve_car(text):
-    if not text or text == '-': return ''
-    digits = re.sub(r'[^0-9]', '', text)
-    if digits in FLEET_CARS: return FLEET_CARS[digits]
-    return text.upper()
 
 def open_sheet():
     d = json.loads(GOOGLE_CREDS)
@@ -326,43 +266,55 @@ def today_str(): return datetime.now(KYIV_TZ).strftime('%d.%m.%y')
 def is_staff(uid): return uid in STAFF_IDS
 
 def polish_reply(raw):
-    logger.info('polish_reply: %s', raw[:60])
     if not claude_client: return raw
     try:
         resp = claude_client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=400,
+            max_tokens=200,
             messages=[{'role': 'user', 'content': (
-                'Ти ввiчливий менеджер автосервiсу Farro. '
-                'Майстер написав клiєнту: ' + raw + '. '
-                'Перепиши украiнською мовою — красиво, ввiчливо, тепло. '
-                'Збережи суть. Тiльки готовий текст.'
+                'Ти менеджер автосервiсу Farro. '
+                'Майстер написав: ' + raw + '. '
+                'Перепиши однiм варiантом украiнською мовою. '
+                'Вiдповiдь коротка, ввiчлива, стримана, без смайлiв. '
+                'Тiльки готовий текст.'
             )}])
-        result = resp.content[0].text.strip()
-        logger.info('polish result: %s', result[:80])
-        return result if result else raw
+        return resp.content[0].text.strip() or raw
     except Exception as e:
-        logger.error('polish_reply: %s', e)
+        logger.error('polish: %s', e)
         return raw
 
 def get_client(tg_id):
     ws = get_ws('Клиенты')
     for row in ws.get_all_values()[1:]:
         if str(row[0]).strip() == str(tg_id):
-            return {'tg_id':row[0],'name':row[1] if len(row)>1 else '',
-                    'phone':row[2] if len(row)>2 else '',
-                    'car':row[3] if len(row)>3 else '',
-                    'model':row[4] if len(row)>4 else ''}
+            return {
+                'tg_id': row[0], 'name': row[1] if len(row)>1 else '',
+                'phone': row[2] if len(row)>2 else '',
+                'car':   row[3] if len(row)>3 else '',
+                'model': row[4] if len(row)>4 else '',
+                'ins_end': row[5] if len(row)>5 else '',
+                'oil_odo': row[6] if len(row)>6 else '',
+                'oil_date':row[7] if len(row)>7 else '',
+                'grm_odo': row[8] if len(row)>8 else '',
+                'grm_date':row[9] if len(row)>9 else '',
+            }
     return None
 
-def save_client(tg_id, name, phone, car, model):
+def save_client(tg_id, data: dict):
     ws = get_ws('Клиенты')
+    row = [
+        str(tg_id),
+        data.get('name',''), data.get('phone',''),
+        data.get('car',''), data.get('model',''),
+        data.get('ins_end',''), data.get('oil_odo',''), data.get('oil_date',''),
+        data.get('grm_odo',''), data.get('grm_date',''), today_str(),
+    ]
     rows = ws.get_all_values()
-    for i, row in enumerate(rows[1:], start=2):
-        if str(row[0]).strip() == str(tg_id):
-            ws.update('B{}:F{}'.format(i,i), [[name,phone,car,model,today_str()]])
+    for i, r in enumerate(rows[1:], start=2):
+        if str(r[0]).strip() == str(tg_id):
+            ws.update('A{}:K{}'.format(i,i), [row])
             return
-    ws.append_row([str(tg_id),name,phone,car,model,today_str()])
+    ws.append_row(row)
 
 def get_all_clients():
     ws = get_ws('Клиенты')
@@ -374,138 +326,122 @@ def gen_request_id():
     num  = len([r for r in rows[1:] if r and r[0]]) + 1
     return 'REQ-{:04d}'.format(num)
 
-def save_request(tg_id, client_name, car, sto_key, service, wish):
+def save_request(tg_id, name, phone, car, sto_key, service, wish):
     rid = gen_request_id()
-    get_ws('Заказы').append_row([rid,now_str(),str(tg_id),client_name,
-                                  car,STO_INFO[sto_key]['name'],service,wish,'new',''])
+    get_ws('Заказы').append_row([
+        rid, now_str(), str(tg_id), name, phone, car,
+        CONTACTS[sto_key]['name'], service, wish, 'new', ''
+    ])
     return rid
 
-def get_orders_by_car(car):
-    cc = car.upper().replace(' ','')
-    result = []
-    for row in get_ws('Заказы').get_all_values()[1:]:
-        if len(row)>4 and cc in str(row[4]).upper().replace(' ',''):
-            result.append({'id':row[0],'date':row[1],
-                           'service':row[6] if len(row)>6 else '',
-                           'status':row[8] if len(row)>8 else ''})
-    return result[-5:]
-
-def get_requests_by_client(tg_id):
+def get_orders_by_client(tg_id):
     result = []
     for row in get_ws('Заказы').get_all_values()[1:]:
         if len(row)>2 and str(row[2]).strip() == str(tg_id):
-            result.append({'id':row[0],'date':row[1],
-                           'service':row[6] if len(row)>6 else '',
-                           'status':row[8] if len(row)>8 else ''})
-    return result[-5:]
+            result.append({
+                'id': row[0], 'date': row[1],
+                'service': row[7] if len(row)>7 else '',
+                'status':  row[9] if len(row)>9 else '',
+            })
+    return result[-10:]
+
+def status_icon(s):
+    return {'new':'Нова','confirmed':'Пiдтверджено','in_work':'В роботi',
+            'ready':'Готово','issued':'Видано'}.get(s, s)
 
 # ── Клавiатури ────────────────────────────────────────────────
 
-# Постiйне меню внизу для клiєнта (як мессенджер)
-def reply_kb_client():
+def kb_new_client():
     return ReplyKeyboardMarkup([
-        ['Послуги та цiни', 'Моє авто'],
-        ['Мої заявки', 'Записатися на ремонт'],
-    ], resize_keyboard=True, input_field_placeholder='Пишiть нам — ми вiдповiмо!')
+        ['Послуги та цiни', 'Контакти'],
+        ['Написати менеджеру'],
+    ], resize_keyboard=True)
 
-# Постiйне меню внизу для менеджера
-def reply_kb_staff():
+def kb_registered_client():
+    return ReplyKeyboardMarkup([
+        ['Послуги та цiни', 'Контакти'],
+        ['Моє авто', 'Написати менеджеру'],
+    ], resize_keyboard=True)
+
+def kb_staff():
     return ReplyKeyboardMarkup([
         ['Новi заявки', 'Всi активнi'],
         ['Авто готове', 'Клiєнти'],
-    ], resize_keyboard=True, input_field_placeholder='Або просто вiдповiдайте клiєнту...')
+    ], resize_keyboard=True)
 
-# Iнлайн кнопки для детального вмiсту
-def kb_sto_choice():
+def client_kb(uid):
+    return kb_registered_client() if get_client(uid) else kb_new_client()
+
+def kb_sto_choice(cb_prefix='menu'):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Кузовний сервiс (вул. Павла Чубинського 2а)', callback_data='menu_body')],
-        [InlineKeyboardButton('СТО (вул. Богдана Хмельницького 4а, лiвий берег)', callback_data='menu_sto')],
+        [InlineKeyboardButton(
+            'Кузовний сервiс (вул. Павла Чубинського 2а)',
+            callback_data='{}_body'.format(cb_prefix))],
+        [InlineKeyboardButton(
+            'СТО (вул. Богдана Хмельницького 4а, лiвий берег)',
+            callback_data='{}_sto'.format(cb_prefix))],
     ])
 
-def kb_services_list(sto_key):
-    c    = CONTACTS[sto_key]
+def kb_write_choice():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            'Кузовний сервiс (Чубинського)',
+            callback_data='write_body')],
+        [InlineKeyboardButton(
+            'СТО (Хмельницького)',
+            callback_data='write_sto')],
+    ])
+
+def kb_services(sto_key):
     btns = []
-    btns.append([InlineKeyboardButton('Вiдкрити в навiгаторi', url=c['maps'])])
     for svc in SERVICES[sto_key]:
-        btns.append([InlineKeyboardButton(
-            svc['name'],
-            callback_data='svc_{}_{}'.format(sto_key, svc['id']))])
-    btns.append([InlineKeyboardButton('Запитати менеджера', callback_data='ask_manager')])
+        btns.append([InlineKeyboardButton(svc['name'], callback_data='svc_{}_{}'.format(sto_key, svc['id']))])
+    btns.append([InlineKeyboardButton('Написати менеджеру', callback_data='ask_manager_{}'.format(sto_key))])
+    btns.append([InlineKeyboardButton('Назад', callback_data='back_services')])
     return InlineKeyboardMarkup(btns)
 
 def kb_service_detail(sto_key, svc_id):
-    c    = CONTACTS[sto_key]
-    btns = [
-        [InlineKeyboardButton('Записатися на цю послугу', callback_data='book_{}_{}'.format(sto_key, svc_id))],
-        [InlineKeyboardButton('Запитати менеджера',        callback_data='ask_manager')],
-    ]
-    btns.append([InlineKeyboardButton('Навiгатор', url=c['maps'])])
-    btns.append([InlineKeyboardButton('Назад до списку', callback_data='menu_{}'.format(sto_key))])
-    return InlineKeyboardMarkup(btns)
-
-def kb_book_confirm(sto_key, svc_id):
+    c = CONTACTS[sto_key]
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Пiдтвердити', callback_data='confirm_{}_{}'.format(sto_key, svc_id))],
-        [InlineKeyboardButton('Скасувати', callback_data='cancel')],
+        [InlineKeyboardButton('Записатися на цю послугу', callback_data='book_{}_{}'.format(sto_key, svc_id))],
+        [InlineKeyboardButton('Написати менеджеру', callback_data='ask_manager_{}'.format(sto_key))],
+        [InlineKeyboardButton('Вiдкрити в навiгаторi', url=c['maps'])],
+        [InlineKeyboardButton('Назад до списку', callback_data='menu_{}'.format(sto_key))],
+    ])
+
+def kb_contacts():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton('Навiгатор: СТО (Хмельницького)', url=CONTACTS['sto']['maps'])],
+        [InlineKeyboardButton('Навiгатор: Кузовний (Чубинського)', url=CONTACTS['body']['maps'])],
     ])
 
 def kb_cancel():
     return InlineKeyboardMarkup([[InlineKeyboardButton('Скасувати', callback_data='cancel')]])
 
-def kb_reply_manager():
-    return None  # Клiєнт просто пише в чат
+def kb_skip_or_cancel():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton('Пропустити', callback_data='skip_field')],
+        [InlineKeyboardButton('Скасувати', callback_data='cancel')],
+    ])
 
 def kb_reply_client(client_id):
     return InlineKeyboardMarkup([[InlineKeyboardButton(
         'Вiдповiсти клiєнту', callback_data='reply_{}'.format(client_id))]])
 
-def kb_ready_list():
-    ws     = get_ws('Заказы')
-    active = [r for r in ws.get_all_values()[1:] if len(r)>8 and r[8] not in ('issued','')]
-    if not active: return None
-    btns = []
-    for r in active[:10]:
-        btns.append([InlineKeyboardButton(
-            '{} — {} | {}'.format(r[0], r[3], r[6]),
-            callback_data='mark_ready_{}'.format(r[0]))])
-    btns.append([InlineKeyboardButton('Скасувати', callback_data='cancel')])
-    return InlineKeyboardMarkup(btns)
-
-def kb_clients_list():
-    clients = get_all_clients()
-    if not clients: return None
-    btns = []
-    for c in clients[:15]:
-        label = '{} {}'.format(c['name'], '({})'.format(c['car']) if c['car'] else '')
-        btns.append([InlineKeyboardButton(label, callback_data='wc_{}'.format(c['tg_id']))])
-    btns.append([InlineKeyboardButton('Скасувати', callback_data='cancel')])
-    return InlineKeyboardMarkup(btns)
-
-def kb_write_templates():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Нагадування про масло',    callback_data='tpl_oil')],
-        [InlineKeyboardButton('Авто готове до видачi',    callback_data='tpl_ready')],
-        [InlineKeyboardButton('Уточнення по цiнi',        callback_data='tpl_price')],
-        [InlineKeyboardButton('Знайшли доп. роботи',      callback_data='tpl_extra')],
-        [InlineKeyboardButton('Свiй текст (через Claude)', callback_data='tpl_custom')],
-        [InlineKeyboardButton('Скасувати',                callback_data='cancel')],
-    ])
-
-# ── Утилiти ───────────────────────────────────────────────────
-
-def contact_block(sto_key):
-    c = CONTACTS[sto_key]
-    return ('{}\n'
-            'Адреса: {}\n'
-            'Карти: {}\n'
-            'Тел.: {}\n'
-            'Графiк: {}').format(c['name'], c['address'], c['maps'], c['hours'])
-
 async def send_to_client(bot, client_id, text):
-    await bot.send_message(
-        chat_id=int(client_id),
-        text='Повiдомлення вiд СТО Farro:\n\n' + text,
-)
+    await bot.send_message(chat_id=int(client_id), text=text)
+
+async def send_photo_cached(bot, chat_id, path, caption=''):
+    key = path
+    if key in _photo_cache:
+        await bot.send_photo(chat_id=chat_id, photo=_photo_cache[key], caption=caption)
+        return
+    try:
+        with open(path, 'rb') as f:
+            msg = await bot.send_photo(chat_id=chat_id, photo=f, caption=caption)
+        _photo_cache[key] = msg.photo[-1].file_id
+    except Exception as e:
+        logger.error('send_photo %s: %s', path, e)
 
 async def notify_staff(bot, message, client_id=None):
     kb = kb_reply_client(client_id) if client_id else None
@@ -513,11 +449,7 @@ async def notify_staff(bot, message, client_id=None):
         try: await bot.send_message(chat_id=uid, text=message, reply_markup=kb)
         except Exception as e: logger.error('notify %s: %s', uid, e)
 
-def status_icon(s):
-    return {'new':'Нова','confirmed':'Пiдтверджено','in_work':'В роботi',
-            'ready':'Готово','issued':'Видано'}.get(s, s)
-
-# ── Основнi хендлери ─────────────────────────────────────────
+# ── Handlers ─────────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
@@ -526,71 +458,99 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if is_staff(uid):
         await update.message.reply_text(
-            'Привiт, {}! ID: {}\nПанель менеджера СТО Farro'.format(name, uid),
-            reply_markup=reply_kb_staff())
+            'Привiт, {}! ID: {}'.format(name, uid),
+            reply_markup=kb_staff())
         return
 
     client = get_client(uid)
-    if client:
-        greeting = 'З поверненням, {}! Оберiть пункт меню або просто напишiть нам.'.format(client['name'])
+    if client and client['name']:
+        text = ('З поверненням, {}!\n\n'
+                'Оберiть пункт меню або просто напишiть нам.').format(client['name'])
+        await update.message.reply_text(text, reply_markup=kb_registered_client())
     else:
-        greeting = 'Вiтаємо в СТО Farro! Оберiть пункт меню нижче або просто напишiть ваше питання.'
-    await update.message.reply_text(greeting, reply_markup=reply_kb_client())
+        text = ('Вiтаємо в СТО Farro!\n\n'
+                'Оберiть пункт меню нижче або напишiть ваше питання — '
+                'менеджер вiдповiсть найближчим часом.')
+        await update.message.reply_text(text, reply_markup=kb_new_client())
 
 async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
     text = (update.message.text or '').strip()
     ud   = ctx.user_data
+    tlo  = text.lower()
 
-    # ── Реєстрацiя ────────────────────────────────────────────
-    if ud.get('reg_step') == 'name':
-        ud['reg_name'] = text; ud['reg_step'] = 'phone'
-        await update.message.reply_text('Ваш номер телефону?', reply_markup=reply_kb_client()); return
-    if ud.get('reg_step') == 'phone':
-        ud['reg_phone'] = text; ud['reg_step'] = 'car'
-        await update.message.reply_text('Номер вашого авто? (або - якщо немає)', reply_markup=reply_kb_client()); return
-    if ud.get('reg_step') == 'car':
-        ud['reg_car'] = resolve_car(text); ud['reg_step'] = 'model'
-        await update.message.reply_text('Марка i модель авто? (або -)', reply_markup=reply_kb_client()); return
-    if ud.get('reg_step') == 'model':
-        save_client(uid, ud['reg_name'], ud['reg_phone'], ud.get('reg_car',''), normalize_car(text))
-        name = ud['reg_name']; ud.clear()
-        await update.message.reply_text(
-            'Дякуємо, {}! Ви зареєстрованi. Тепер просто пишiть нам!'.format(name),
-            reply_markup=reply_kb_client()); return
+    # ── Реєстрацiя через "Написати менеджеру" ─────────────────
+    if ud.get('reg_step'):
+        step = ud['reg_step']
+        data = ud.setdefault('reg_data', {})
 
-    # ── Пошук авто для статусу ─────────────────────────────────
-    if ud.get('wait_car_status'):
-        ud.pop('wait_car_status')
-        orders = get_orders_by_car(text)
-        if not orders:
-            await update.message.reply_text('Авто {} не знайдено в наших записах.'.format(text.upper()),
-                                            reply_markup=reply_kb_client()); return
-        lines = ['Статус авто {}:'.format(text.upper())]
-        for o in reversed(orders):
-            lines.append('{} | {} | {}'.format(o['date'], o['service'], status_icon(o['status'])))
-        await update.message.reply_text('\n'.join(lines), reply_markup=reply_kb_client()); return
+        if step == 'phone':
+            if text != '-': data['phone'] = text
+            ud['reg_step'] = 'name'
+            await update.message.reply_text(
+                'Як вас звати? (необов\'язково, можна пропустити)',
+                reply_markup=kb_skip_or_cancel()); return
 
-    # ── Побажання при записi ──────────────────────────────────
-    if ud.get('wait_wish'):
-        sto_key = ud.get('sel_sto')
-        svc_id  = ud.get('sel_svc')
-        ud.pop('wait_wish', None)
-        svc     = next((s for s in SERVICES[sto_key] if s['id']==svc_id), None)
-        svc_name= svc['name'] if svc else svc_id
-        client  = get_client(uid)
-        cname   = client['name'] if client else str(uid)
-        car     = client['car']  if client else 'не вказано'
-        c       = CONTACTS[sto_key]
-        rid     = save_request(uid, cname, car, sto_key, svc_name, text)
-        msg = ('НОВА ЗАЯВКА {}\n\nКлiєнт: {}\nАвто: {}\nСТО: {}\n'
-               'Послуга: {}\nПобажання: {}\n{}').format(
-            rid, cname, car, c['name'], svc_name, text, now_str())
-        await notify_staff(ctx.bot, msg, client_id=uid)
-        await update.message.reply_text(
-            'Заявку прийнято! Номер: {}\nПослуга: {}\n{}\n{}\n\nМайстер зв\'яжеться найближчим часом.'.format(
-                rid, svc_name, c['address'], c['hours']),
-            reply_markup=reply_kb_client()); return
+        if step == 'name':
+            if text not in ('-', 'Пропустити'): data['name'] = text
+            ud['reg_step'] = 'car'
+            await update.message.reply_text(
+                'Марка та модель вашого авто? (необов\'язково)',
+                reply_markup=kb_skip_or_cancel()); return
+
+        if step == 'car':
+            if text not in ('-', 'Пропустити'): data['car'] = normalize_car(text)
+            # Save client
+            save_client(uid, data)
+            sto_key = ud.get('reg_sto', 'sto')
+            ud['reg_step'] = None
+            ud['write_sto'] = sto_key
+            c = CONTACTS[sto_key]
+            msg = ('Дякуємо! Тепер просто напишiть ваше питання — '
+                   'менеджер {} вiдповiсть найближчим часом.').format(c['name'])
+            await update.message.reply_text(msg, reply_markup=client_kb(uid)); return
+
+    # ── Заповнення профiлю авто (Моє авто) ────────────────────
+    if ud.get('mycar_step'):
+        step = ud['mycar_step']
+        data = ud.setdefault('mycar_data', {})
+
+        fields = ['name','phone','car','ins_end','oil_odo','oil_date','grm_odo','grm_date']
+        prompts = {
+            'name':     'Ваше iм\'я',
+            'phone':    'Номер телефону',
+            'car':      'Марка та модель авто',
+            'ins_end':  'Дата закiнчення страховки (наприклад 31.12.26)',
+            'oil_odo':  'Одометр при останнiй замiнi масла (км)',
+            'oil_date': 'Дата останньої замiни масла (наприклад 15.03.26)',
+            'grm_odo':  'Одометр при останнiй замiнi ГРМ (км)',
+            'grm_date': 'Дата останньої замiни ГРМ (наприклад 10.01.25)',
+        }
+
+        if text not in ('-', 'Пропустити'):
+            if step == 'car':
+                data[step] = normalize_car(text)
+            else:
+                data[step] = text
+
+        curr_idx = fields.index(step)
+        if curr_idx + 1 < len(fields):
+            next_field = fields[curr_idx + 1]
+            ud['mycar_step'] = next_field
+            await update.message.reply_text(
+                '{} (необов\'язково):'.format(prompts[next_field]),
+                reply_markup=kb_skip_or_cancel()); return
+        else:
+            # All done - merge with existing
+            client = get_client(uid) or {}
+            client.update({k:v for k,v in data.items() if v})
+            save_client(uid, client)
+            ud['mycar_step'] = None
+            await update.message.reply_text(
+                'Дякуємо! Данi збережено. Тепер у роздiлi "Моє авто" '
+                'ви зможете вводити поточний одометр i система нагадає '
+                'про замiну масла, ГРМ та страховку.',
+                reply_markup=kb_registered_client()); return
 
     # ── Вiдповiдь менеджера клiєнту ───────────────────────────
     if ud.get('wait_reply_to'):
@@ -598,133 +558,126 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         polished  = polish_reply(text)
         try:
             await send_to_client(ctx.bot, client_id, polished)
-
         except Exception as e:
-            await update.message.reply_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
+            logger.error('reply: %s', e)
         return
 
-
-    if ud.get('wait_custom'):
-        ud.pop('wait_custom')
-        client_id = ud.get('write_to_id')
-        cname     = ud.get('write_to_name','')
-        polished  = polish_reply(text)
-        try:
-            await send_to_client(ctx.bot, client_id, polished)
-
-        except Exception as e:
-            await update.message.reply_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
-        return
-
-
-    # ── Пiдтвердження запису ──────────────────────────────────
-    if ud.get('wait_confirm'):
-        rid = text.strip().upper(); ud.pop('wait_confirm')
-        ws  = get_ws('Заказы')
-        for i, row in enumerate(ws.get_all_values()[1:], start=2):
-            if str(row[0]).strip() == rid:
-                ws.update('I{}'.format(i), [['confirmed']])
-                cid     = str(row[2]).strip() if len(row)>2 else None
-                service = row[6] if len(row)>6 else ''
-                if cid:
-                    try:
-                        await ctx.bot.send_message(
-                            chat_id=int(cid),
-                            text='Ваш запис пiдтверджено!\nЗаявка: {}\nПослуга: {}\nЧекаємо вас!'.format(rid, service),
-                            )
-                    except Exception as e: logger.error('confirm: %s', e)
-                await update.message.reply_text('Запис {} пiдтверджено.'.format(rid), reply_markup=reply_kb_staff())
-                return
-        await update.message.reply_text('Заявку {} не знайдено.'.format(rid), reply_markup=reply_kb_staff()); return
-
-    # ── Повiдомлення вiд клiєнта менеджеру ───────────────────
-    if ud.get('wait_client_msg'):
-        ud.pop('wait_client_msg')
-        client = get_client(uid)
-        cname  = client['name'] if client else 'Новий клiєнт'
-        car    = client['car']  if client else 'не вказано'
-        fwd    = 'Повiдомлення вiд клiєнта:\n{} | {}\n\n{}'.format(cname, car, text)
-        await notify_staff(ctx.bot, fwd, client_id=uid)
-        await update.message.reply_text('Повiдомлення надiслано менеджеру.', reply_markup=reply_kb_client()); return
-
-    # ── Reply keyboard команди ────────────────────────────────
-    text_lo = text.lower()
-
-    if 'послуги' in text_lo or 'цiни' in text_lo or 'цены' in text_lo:
-        await update.message.reply_text('Оберiть сервiс:', reply_markup=kb_sto_choice()); return
-
-    if 'статус' in text_lo or 'авто' in text_lo or 'готово' in text_lo:
-        client = get_client(uid)
-        if client and client['car']:
-            orders = get_orders_by_car(client['car'])
-            if orders:
-                lines = ['Статус авто {}:'.format(client['car'])]
-                for o in reversed(orders):
-                    lines.append('{} | {} | {}'.format(o['date'], o['service'], status_icon(o['status'])))
-                await update.message.reply_text('\n'.join(lines), reply_markup=reply_kb_client()); return
-        ud['wait_car_status'] = True
-        await update.message.reply_text('Введiть номер авто:', reply_markup=reply_kb_client()); return
-
-    if 'записат' in text_lo or 'запис' in text_lo:
-        client = get_client(uid)
-        if not client:
-            ud['reg_step'] = 'name'
-            await update.message.reply_text('Для запису потрiбна реєстрацiя. Як вас звати?',
-                                            reply_markup=reply_kb_client())
-        else:
-            await update.message.reply_text('Оберiть сервiс для запису:', reply_markup=kb_sto_choice())
-        return
-
-    # Клiєнт згадав менеджера - просто пiдтверджуємо що чуємо
-    if 'менеджер' in text_lo and not is_staff(uid):
-        pass  # впаде далi на загальний обробник чату
-
-    # ── Менеджер: команди ────────────────────────────────────
+    # ── Reply keyboard — менеджер ─────────────────────────────
     if is_staff(uid):
-        if 'новi' in text_lo or 'заявки' in text_lo:
+        if 'новi' in tlo or 'заявки' in tlo:
             ws    = get_ws('Заказы')
-            new_r = [r for r in ws.get_all_values()[1:] if len(r)>8 and r[8]=='new']
+            new_r = [r for r in ws.get_all_values()[1:] if len(r)>9 and r[9]=='new']
             if not new_r:
-                await update.message.reply_text('Нових заявок немає.', reply_markup=reply_kb_staff()); return
+                await update.message.reply_text('Нових заявок немає.', reply_markup=kb_staff()); return
             lines = ['Новi заявки: {}'.format(len(new_r))]
             for r in new_r:
-                lines.append('{} | {} | {} | {}'.format(r[0], r[3], r[6], r[1]))
-            await update.message.reply_text('\n'.join(lines), reply_markup=reply_kb_staff()); return
+                lines.append('{} | {} | {} | {}'.format(r[0], r[3], r[7], r[1]))
+            await update.message.reply_text('\n'.join(lines), reply_markup=kb_staff()); return
 
-        if 'активн' in text_lo or 'всi' in text_lo:
+        if 'активн' in tlo or 'всi' in tlo:
             ws     = get_ws('Заказы')
-            active = [r for r in ws.get_all_values()[1:] if len(r)>8 and r[8] not in ('issued','')]
+            active = [r for r in ws.get_all_values()[1:] if len(r)>9 and r[9] not in ('issued','')]
             if not active:
-                await update.message.reply_text('Активних заявок немає.', reply_markup=reply_kb_staff()); return
-            lines = ['Активнi заявки: {}'.format(len(active))]
+                await update.message.reply_text('Активних заявок немає.', reply_markup=kb_staff()); return
+            lines = ['Активнi: {}'.format(len(active))]
             for r in active:
-                lines.append('{} {} | {} | {}'.format(status_icon(r[8]), r[0], r[3], r[6]))
-            await update.message.reply_text('\n'.join(lines), reply_markup=reply_kb_staff()); return
+                lines.append('{} | {} | {}'.format(r[0], r[3], r[7]))
+            await update.message.reply_text('\n'.join(lines), reply_markup=kb_staff()); return
 
-        if 'готове' in text_lo or 'готово' in text_lo:
-            kb = kb_ready_list()
-            if not kb:
-                await update.message.reply_text('Активних заявок немає.', reply_markup=reply_kb_staff()); return
-            await update.message.reply_text('Оберiть готову заявку:', reply_markup=kb); return
+        if 'готове' in tlo or 'готово' in tlo:
+            ws     = get_ws('Заказы')
+            active = [r for r in ws.get_all_values()[1:] if len(r)>9 and r[9] not in ('issued','')]
+            if not active:
+                await update.message.reply_text('Активних заявок немає.', reply_markup=kb_staff()); return
+            btns = []
+            for r in active[:10]:
+                btns.append([InlineKeyboardButton(
+                    '{} — {} | {}'.format(r[0], r[3], r[7]),
+                    callback_data='mark_ready_{}'.format(r[0]))])
+            btns.append([InlineKeyboardButton('Скасувати', callback_data='cancel')])
+            await update.message.reply_text('Оберiть готову заявку:', reply_markup=InlineKeyboardMarkup(btns)); return
 
-        if 'клiєнти' in text_lo or 'клієнти' in text_lo or 'написати' in text_lo:
-            kb = kb_clients_list()
-            if not kb:
-                await update.message.reply_text('Клiєнтiв не знайдено.', reply_markup=reply_kb_staff()); return
-            await update.message.reply_text('Оберiть клiєнта:', reply_markup=kb); return
+        if 'клiєнти' in tlo or 'клієнти' in tlo:
+            clients = get_all_clients()
+            if not clients:
+                await update.message.reply_text('Клiєнтiв немає.', reply_markup=kb_staff()); return
+            btns = []
+            for c in clients[:15]:
+                label = '{} {}'.format(c['name'], '({})'.format(c['car']) if c['car'] else '')
+                btns.append([InlineKeyboardButton(label.strip(), callback_data='wc_{}'.format(c['tg_id']))])
+            btns.append([InlineKeyboardButton('Скасувати', callback_data='cancel')])
+            await update.message.reply_text('Оберiть клiєнта:', reply_markup=InlineKeyboardMarkup(btns)); return
 
-        # Менеджер написав текст без контексту
-        # Нагадуємо: треба натиснути "Вiдповiсти" пiд повiдомленням клiєнта
-        msg = 'Щоб вiдповiсти — натиснiть кнопку Вiдповiсти клiєнту пiд його повiдомленням. Або оберiть клiєнта через Клiєнти.'
-        await update.message.reply_text(msg, reply_markup=reply_kb_staff())
-        return
+        await update.message.reply_text('Оберiть дiю:', reply_markup=kb_staff()); return
 
-    # ── Будь-яке повiдомлення вiд клiєнта — це чат з менеджером ──
+    # ── Reply keyboard — клiєнт ───────────────────────────────
+    if 'послуги' in tlo or 'цiни' in tlo or 'цены' in tlo:
+        await update.message.reply_text('Оберiть сервiс:', reply_markup=kb_sto_choice()); return
+
+    if 'контакт' in tlo:
+        c_sto  = CONTACTS['sto']
+        c_body = CONTACTS['body']
+        msg = (
+            'Контакти СТО Farro\n\n'
+            'Телефони: {}\n\n'
+            'СТО\n'
+            '{}\n'
+            'Графiк: {}\n\n'
+            'Кузовний сервiс\n'
+            '{}\n'
+            'Графiк: {}'
+        ).format(
+            PHONES_TEXT,
+            c_sto['address'], c_sto['hours'],
+            c_body['address'], c_body['hours'],
+        )
+        await update.message.reply_text(msg, reply_markup=kb_contacts()); return
+
+    if 'моє авто' in tlo or 'мое авто' in tlo:
+        client = get_client(uid)
+        if not client:
+            await update.message.reply_text(
+                'Спочатку потрiбно зареєструватись. Напишiть нам або запишiться на послугу.',
+                reply_markup=kb_new_client()); return
+
+        lines = ['Ваш автомобiль']
+        if client.get('name'):  lines.append('Iм\'я: {}'.format(client['name']))
+        if client.get('phone'): lines.append('Тел.: {}'.format(client['phone']))
+        if client.get('car'):   lines.append('Авто: {}'.format(client['car']))
+        if client.get('ins_end'): lines.append('Страховка до: {}'.format(client['ins_end']))
+        if client.get('oil_odo'): lines.append('Замiна масла: {} км ({})'.format(client['oil_odo'], client.get('oil_date','')))
+        if client.get('grm_odo'): lines.append('Замiна ГРМ: {} км ({})'.format(client['grm_odo'], client.get('grm_date','')))
+
+        orders = get_orders_by_client(uid)
+        if orders:
+            lines.append('\nIсторiя замовлень:')
+            for o in reversed(orders):
+                lines.append('{} | {} | {}'.format(o['date'], o['service'], status_icon(o['status'])))
+
+        lines.append('\nОновити данi авто?')
+        btns = InlineKeyboardMarkup([
+            [InlineKeyboardButton('Оновити данi', callback_data='update_mycar')],
+        ])
+        await update.message.reply_text('\n'.join(lines), reply_markup=btns); return
+
+    if 'написати' in tlo or 'менеджер' in tlo:
+        await update.message.reply_text(
+            'Оберiть, до якого сервiсу звертаєтесь:',
+            reply_markup=kb_write_choice()); return
+
+    if 'записат' in tlo:
+        await update.message.reply_text('Оберiть сервiс для запису:', reply_markup=kb_sto_choice('menu')); return
+
+    # ── Будь-яке iнше повiдомлення вiд клiєнта ───────────────
     client = get_client(uid)
-    cname  = client['name'] if client else 'Новий клiєнт ({})'.format(uid)
-    car    = client['car']  if client else 'не вказано'
-    fwd    = 'Клiєнт пише:\n{} | {}\n\n{}'.format(cname, car, text)
+    cname  = client['name'] if client else 'Новий клiєнт'
+    phone  = client['phone'] if client else 'не вказано'
+    car    = client['car']   if client else 'не вказано'
+    sto    = ud.get('write_sto', 'обидва СТО')
+    fwd    = 'Клiєнт пише ({}):\n{} | {} | {}\n\n{}'.format(sto, cname, phone, car, text)
+    ctx.bot_data['last_client_{}' .format(uid)] = uid
     await notify_staff(ctx.bot, fwd, client_id=uid)
+
 async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q    = update.callback_query
     uid  = q.from_user.id
@@ -736,23 +689,76 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ud.clear()
         await q.edit_message_text('Скасовано.'); return
 
-    if data == 'ask_manager':
-        ud['wait_client_msg'] = True
-        await q.edit_message_text('Напишiть ваше питання — менеджер вiдповiсть найближчим часом:'); return
+    if data == 'skip_field':
+        # Simulate empty input for current step
+        update.callback_query.message.text = '-'
+        fake = type('FakeUpdate', (), {
+            'effective_user': update.effective_user,
+            'message': type('Msg', (), {
+                'text': '-', 'reply_text': update.callback_query.message.reply_text
+            })()
+        })()
+        # Just advance step
+        step = ud.get('reg_step') or ud.get('mycar_step')
+        if ud.get('reg_step'):
+            fields = ['phone','name','car']
+            idx = fields.index(step) if step in fields else -1
+        else:
+            fields = ['name','phone','car','ins_end','oil_odo','oil_date','grm_odo','grm_date']
+            idx = fields.index(step) if step in fields else -1
 
-    # Меню СТО або кузовного
+        if idx >= 0 and idx+1 < len(fields):
+            next_f = fields[idx+1]
+            if ud.get('reg_step'): ud['reg_step'] = next_f
+            else: ud['mycar_step'] = next_f
+            prompts = {
+                'name':'Iм\'я','phone':'Номер телефону','car':'Марка та модель авто',
+                'ins_end':'Дата страховки','oil_odo':'Одометр замiни масла',
+                'oil_date':'Дата замiни масла','grm_odo':'Одометр замiни ГРМ',
+                'grm_date':'Дата замiни ГРМ',
+            }
+            await q.message.reply_text(
+                '{} (необов\'язково):'.format(prompts.get(next_f, next_f)),
+                reply_markup=kb_skip_or_cancel())
+        elif ud.get('reg_step'):
+            save_client(uid, ud.get('reg_data',{}))
+            sto_key = ud.get('reg_sto','sto')
+            ud.clear()
+            ud['write_sto'] = sto_key
+            await q.message.reply_text(
+                'Дякуємо! Напишiть ваше питання.',
+                reply_markup=client_kb(uid))
+        else:
+            client = get_client(uid) or {}
+            client.update({k:v for k,v in ud.get('mycar_data',{}).items() if v})
+            save_client(uid, client)
+            ud.clear()
+            await q.message.reply_text('Данi збережено.', reply_markup=kb_registered_client())
+        return
+
+    if data == 'back_services':
+        await q.edit_message_text('Оберiть сервiс:', reply_markup=kb_sto_choice()); return
+
+    if data == 'update_mycar':
+        ud['mycar_step'] = 'name'
+        ud['mycar_data'] = {}
+        await q.edit_message_text(
+            'Заповнiть данi про ваш автомобiль.\n'
+            'Всi поля необов\'язковi — можна пропустити.\n\n'
+            'Iм\'я:',
+            reply_markup=kb_skip_or_cancel()); return
+
+    # Меню СТО
     if data.startswith('menu_'):
         sto_key = data[5:]
-        c       = CONTACTS[sto_key]
-        phones  = '  '.join(p[0] for p in PHONES)
-        phones_txt = '  '.join(p[0] for p in PHONES)
-        text    = ('{}\n\n'
-                   'Адреса: {}\n'
-                   'Графiк: {}\n'
-                   'Тел.: {}\n\n'
-                   'Оберiть послугу:').format(
-            c['name'], c['address'], c['hours'], phones_txt)
-        await q.edit_message_text(text, reply_markup=kb_services_list(sto_key)); return
+        if sto_key not in CONTACTS: return
+        c = CONTACTS[sto_key]
+        msg = ('{}\n\n'
+               'Адреса: {}\n'
+               'Графiк: {}\n'
+               'Тел.: {}\n\n'
+               'Оберiть послугу:').format(c['name'], c['address'], c['hours'], PHONES_TEXT)
+        await q.edit_message_text(msg, reply_markup=kb_services(sto_key)); return
 
     # Деталi послуги
     if data.startswith('svc_'):
@@ -762,117 +768,103 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         svc     = next((s for s in SERVICES[sto_key] if s['id']==svc_id), None)
         if not svc:
             await q.edit_message_text('Послугу не знайдено.'); return
-        c = CONTACTS[sto_key]
-        phones_txt = '  '.join(p[0] for p in PHONES)
-        text = ('{}\n\n{}\n\n'
-                'Адреса: {}\n'
-                'Графiк: {}\n'
-                'Тел.: {}').format(
-            svc['name'], svc['desc'],
-            c['address'], c['hours'], phones_txt)
-        await q.edit_message_text(text, reply_markup=kb_service_detail(sto_key, svc_id)); return
+        c   = CONTACTS[sto_key]
+        msg = ('{}\n\n{}\n\n'
+               'Адреса: {}\n'
+               'Графiк: {}\n'
+               'Тел.: {}').format(svc['name'], svc['text'], c['address'], c['hours'], PHONES_TEXT)
+        # Telegram limit 4096
+        if len(msg) > 4000:
+            msg = msg[:3990] + '...'
+        await q.edit_message_text(msg, reply_markup=kb_service_detail(sto_key, svc_id)); return
 
-    # Запис на конкретну послугу
+    # Запис на послугу
     if data.startswith('book_'):
         parts   = data[5:].split('_', 1)
         sto_key = parts[0]
         svc_id  = parts[1] if len(parts)>1 else ''
+        svc     = next((s for s in SERVICES[sto_key] if s['id']==svc_id), None)
+        svc_name= svc['name'] if svc else svc_id
         client  = get_client(uid)
-        if not client:
-            ud['reg_step']  = 'name'
-            ud['after_reg_sto'] = sto_key
-            ud['after_reg_svc'] = svc_id
-            await q.edit_message_text('Для запису потрiбна реєстрацiя. Як вас звати?'); return
-        ud['sel_sto']   = sto_key
-        ud['sel_svc']   = svc_id
-        ud['wait_wish'] = True
-        svc = next((s for s in SERVICES[sto_key] if s['id']==svc_id), None)
-        svc_name = svc['name'] if svc else svc_id
+        name    = client['name']  if client else ''
+        phone   = client['phone'] if client else ''
+        car     = client['car']   if client else ''
+        rid     = save_request(uid, name, phone, car, sto_key, svc_name, 'запис через бота')
+        c       = CONTACTS[sto_key]
+        msg = ('{}\nКлiєнт: {} | {} | {}\nПослуга: {}\n{}').format(
+            rid, name or str(uid), phone or 'тел. не вказано',
+            car or 'авто не вказано', svc_name, now_str())
+        await notify_staff(ctx.bot, 'НОВА ЗАЯВКА\n\n' + msg, client_id=uid)
         await q.edit_message_text(
-            'Послуга: {}\n\nОпишiть проблему i зручний час для запису:'.format(svc_name)); return
+            'Заявку прийнято!\nНомер: {}\nПослуга: {}\n{}\n{}\n\n'
+            'Менеджер зв\'яжеться з вами найближчим часом.'.format(
+                rid, svc_name, c['address'], c['hours'])); return
 
-    # Вибiр СТО для запису через reply kb
-    if data.startswith('sto_'):
-        sto_key = data[4:]
-        if sto_key not in STO_INFO: return
-        ud['sel_sto'] = sto_key
+    # Запитати менеджера з послуги
+    if data.startswith('ask_manager_'):
+        sto_key = data[12:]
+        ud['write_sto'] = sto_key
+        c = CONTACTS.get(sto_key, CONTACTS['sto'])
+        await q.edit_message_text(
+            'Напишiть ваше питання — менеджер {} вiдповiсть найближчим часом.'.format(c['name'])); return
+
+    # Написати менеджеру (вибiр СТО)
+    if data.startswith('write_'):
+        sto_key = data[6:]
+        client  = get_client(uid)
+        if not client or not client.get('phone'):
+            ud['reg_sto']  = sto_key
+            ud['reg_step'] = 'phone'
+            ud['reg_data'] = {}
+            await q.edit_message_text(
+                'Будь ласка, вкажiть ваш номер телефону, '
+                'щоб менеджер мiг з вами зв\'язатись:',
+                reply_markup=kb_cancel()); return
+        ud['write_sto'] = sto_key
         c = CONTACTS[sto_key]
         await q.edit_message_text(
-            '{}\n{}\n{}\n\nОберiть послугу:'.format(c['name'], c['address'], c['hours']),
-            reply_markup=kb_services_list(sto_key)); return
+            'Напишiть ваше питання — менеджер {} вiдповiсть найближчим часом.'.format(c['name'])); return
 
-    # Вiдповiдь клiєнту — кнопка у повiдомленнi для менеджера
+    # Вiдповiдь клiєнту
     if data.startswith('reply_'):
         client_id = int(data[6:])
         ud['wait_reply_to'] = client_id
-        await q.edit_message_text('Пишiть:'); return
+        await q.edit_message_text(''); return
 
-    # Готовнiсть авто
+    # Позначити авто готовим
     if data.startswith('mark_ready_'):
         rid  = data[11:]
         ws   = get_ws('Заказы')
         for i, row in enumerate(ws.get_all_values()[1:], start=2):
             if str(row[0]).strip() == rid:
-                ws.update('I{}'.format(i), [['ready']])
+                ws.update('J{}'.format(i), [['ready']])
                 cid      = str(row[2]).strip() if len(row)>2 else None
-                car      = row[4] if len(row)>4 else ''
-                service  = row[6] if len(row)>6 else ''
-                sto_name = row[5] if len(row)>5 else ''
+                car      = row[5] if len(row)>5 else ''
+                service  = row[7] if len(row)>7 else ''
+                sto_name = row[6] if len(row)>6 else ''
                 if cid:
                     try:
                         await ctx.bot.send_message(
                             chat_id=int(cid),
-                            text='Ваш автомобiль готовий!\nАвто: {}\nПослуга: {}\n{}\nЧекаємо вас!'.format(
-                                car, service, sto_name),
-                            )
+                            text='Ваш автомобiль готовий до видачi.\n\nАвто: {}\nПослуга: {}\n{}\n\nЧекаємо вас.'.format(
+                                car, service, sto_name))
                     except Exception as e: logger.error('ready: %s', e)
-                await q.edit_message_text('Заявка {} вiдмiчена як готова. Клiєнта повiдомлено.'.format(rid)); return
+                await q.edit_message_text('Заявка {} — готова. Клiєнта повiдомлено.'.format(rid)); return
         await q.edit_message_text('Заявку не знайдено.'); return
 
     # Вибiр клiєнта для написання
     if data.startswith('wc_'):
-        cid  = data[3:]
-        ws   = get_ws('Клиенты')
+        cid = data[3:]
+        ws  = get_ws('Клиенты')
         cname = cid; car = ''
         for r in ws.get_all_values()[1:]:
             if str(r[0]).strip() == cid:
                 cname = r[1] if len(r)>1 else cname
                 car   = r[3] if len(r)>3 else ''
                 break
-        ud['write_to_id']   = int(cid)
-        ud['write_to_name'] = cname
-        ud['write_to_car']  = car
+        ud['wait_reply_to'] = int(cid)
         car_s = ' ({})'.format(car) if car else ''
-        await q.edit_message_text(
-            'Клiєнт: {}{}. Оберiть тип:'.format(cname, car_s),
-            reply_markup=kb_write_templates()); return
-
-    # Шаблони
-    if data.startswith('tpl_'):
-        tpl   = data[4:]
-        cname = ud.get('write_to_name','')
-        car   = ud.get('write_to_car','')
-        cid   = ud.get('write_to_id')
-        car_s = ' ({})'.format(car) if car else ''
-
-        if tpl == 'custom':
-            ud['wait_custom'] = True
-            await q.edit_message_text(
-                'Напишiть текст для {} — Claude зробить його ввiчливiшим:'.format(cname)); return
-
-        texts = {
-            'oil':   'Нагадуємо — для вашого авто{} наближається час замiни олiї. Записуйтесь на ТО у СТО Farro!'.format(car_s),
-            'ready': 'Ваш автомобiль{} готовий до видачi. Чекаємо вас!'.format(car_s),
-            'price': 'Хотiли уточнити вартiсть робiт по вашому авто{}. Напишiть нам.'.format(car_s),
-            'extra': 'Виявили додатковi роботи по вашому авто{}. Розкажемо детальнiше.'.format(car_s),
-        }
-        if tpl in texts and cid:
-            try:
-                await send_to_client(ctx.bot, cid, texts[tpl])
-                await q.edit_message_text('OK', reply_markup=reply_kb_staff())
-            except Exception as e:
-                await q.edit_message_text('Помилка: {}'.format(e), reply_markup=reply_kb_staff())
-        return
+        await q.edit_message_text('Клiєнт: {}{}. Напишiть повiдомлення:'.format(cname, car_s)); return
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -880,8 +872,7 @@ def main():
     app.add_handler(CommandHandler('menu',  cmd_start))
     app.add_handler(CallbackQueryHandler(handle_cb))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
-    logger.info('СТО бот %s v5 запущен!', STO_NAME)
-    logger.info('CLAUDE: %s | STAFF: %s', bool(claude_client), STAFF_IDS)
+    logger.info('СТО бот v6 запущен! CLAUDE=%s STAFF=%s', bool(claude_client), STAFF_IDS)
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
