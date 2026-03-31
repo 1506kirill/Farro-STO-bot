@@ -507,7 +507,7 @@ def contact_block(sto_key):
             'Адреса: {}\n'
             'Карти: {}\n'
             'Тел.: {}\n'
-            'Графiк: {}').format(c['name'], c['address'], c['maps'], c['phone'], c['hours'])
+            'Графiк: {}').format(c['name'], c['address'], c['maps'], c['hours'])
 
 async def send_to_client(bot, client_id, text):
     await bot.send_message(
@@ -752,13 +752,13 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if data.startswith('menu_'):
         sto_key = data[5:]
         c       = CONTACTS[sto_key]
+        phones  = '  '.join(p[0] for p in PHONES)
         text    = ('{}\n\n'
                    'Адреса: {}\n'
-                   'Карти/Навiгатор: {}\n'
-                   'Телефон: {}\n'
-                   'Графiк: {}\n\n'
+                   'Графiк: {}\n'
+                   'Тел.: {}\n\n'
                    'Оберiть послугу:').format(
-            c['name'], c['address'], c['maps'], c['phone'], c['hours'])
+            c['name'], c['address'], c['hours'], phones)
         await q.edit_message_text(text, reply_markup=kb_services_list(sto_key)); return
 
     # Деталi послуги
@@ -773,10 +773,9 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         text = ('{} {}\n\n{}\n\n'
                 'Адреса: {}\n'
                 'Карти: {}\n'
-                'Тел.: {}\n'
                 'Графiк: {}').format(
             svc['icon'], svc['name'], svc['desc'],
-            c['address'], c['maps'], c['phone'], c['hours'])
+            c['address'], c['maps'], c['hours'])
         await q.edit_message_text(text, reply_markup=kb_service_detail(sto_key, svc_id)); return
 
     # Запис на конкретну послугу
