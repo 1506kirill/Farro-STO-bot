@@ -72,8 +72,8 @@ SERVICES = {
             'text': (
                 'Дiагностика та заправка кондицiонерiв\n\n'
                 'Пiдключення та дiагностика — 400 грн\n'
-                '1 г фреону — 1,8 грн\n'
-                '1 г компресорного масла — 10 грн\n\n'
+                '1 гр фреону — 1,8 грн\n'
+                '1 гр компресорного масла — 10 грн\n\n'
                 'Також виконуємо:\n'
                 'Ремонт трубок кондицiонера\n'
                 'Пошук та усунення витоку фреону\n'
@@ -101,7 +101,7 @@ SERVICES = {
             'id':   'wheel',
             'name': 'Розвал-сходження 3D',
             'text': (
-                'Точне регулювання кутiв коленiс на 3D стендi\n\n'
+                'Точне регулювання кутiв колiс на 3D стендi\n\n'
                 'Одна вiсь — вiд 600 грн\n'
                 'Двi осi — 1 000 грн\n\n'
                 'Детальнiше: https://farro.ua/razval-shozhdenie/'
@@ -178,7 +178,7 @@ SERVICES = {
                 'Замiна порога — вiд 3 000 грн\n'
                 'Замiна полотна даху — вiд 20 000 грн\n'
                 'Витяжка лонжерона — вiд 10 000 грн\n'
-                'Рихтування порога пiсля удару об бордюр — вiд 2 000 грн\n'
+                'Рихтування порога — вiд 2 000 грн\n'
                 'Замiна лобового скла — 3 000 грн\n\n'
                 'Детальнiше: https://farro.ua/rihtovka-avto/'
             ),
@@ -190,7 +190,7 @@ SERVICES = {
                 'Професiйна покраска з пiдбором кольору\n\n'
                 'Покраска однiєї деталi — 4 500 грн + матерiали\n'
                 'Покраска однiєї деталi трьохшаровою фарбою — 6 000 грн + матерiали\n'
-                'Повний перефарб авто — вiд 70 000 грн + матерiали\n\n'
+                'Повне перефарбування авто — вiд 70 000 грн + матерiали\n\n'
                 'Важливо: кiлькiсть та вартiсть матерiалiв розраховує лише маляр '
                 'пiсля огляду авто — по телефону визначити неможливо.\n\n'
                 'Детальнiше: https://farro.ua/pokraska-avto/'
@@ -360,13 +360,13 @@ def kb_new_client():
     return ReplyKeyboardMarkup([
         ['Послуги та цiни', 'Контакти'],
         ['Написати менеджеру'],
-    ], resize_keyboard=True)
+    ], resize_keyboard=True, is_persistent=True)
 
 def kb_registered_client():
     return ReplyKeyboardMarkup([
         ['Послуги та цiни', 'Контакти'],
         ['Моє авто', 'Написати менеджеру'],
-    ], resize_keyboard=True)
+    ], resize_keyboard=True, is_persistent=True)
 
 def kb_staff():
     return ReplyKeyboardMarkup([
@@ -408,7 +408,6 @@ def kb_services(sto_key):
 def kb_service_detail(sto_key, svc_id):
     c = CONTACTS[sto_key]
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Записатися на цю послугу', callback_data='book_{}_{}'.format(sto_key, svc_id))],
         [InlineKeyboardButton('Написати менеджеру', callback_data='ask_manager_{}'.format(sto_key))],
         [InlineKeyboardButton('Вiдкрити в навiгаторi', url=c['maps'])],
         [InlineKeyboardButton('Назад до списку', callback_data='menu_{}'.format(sto_key))],
@@ -617,28 +616,11 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # ── Reply keyboard — клiєнт ───────────────────────────────
     if 'послуги' in tlo or 'цiни' in tlo or 'цены' in tlo:
+        ud.clear()
         await update.message.reply_text('Оберiть сервiс:', reply_markup=kb_sto_choice()); return
 
     if 'контакт' in tlo:
         c_sto  = CONTACTS['sto']
-        c_body = CONTACTS['body']
-        msg = (
-            'Контакти СТО Farro\n\n'
-            'Телефони: {}\n\n'
-            'СТО\n'
-            '{}\n'
-            'Графiк: {}\n\n'
-            'Кузовний сервiс\n'
-            '{}\n'
-            'Графiк: {}'
-        ).format(
-            PHONES_TEXT,
-            c_sto['address'], c_sto['hours'],
-            c_body['address'], c_body['hours'],
-        )
-        await update.message.reply_text(msg, reply_markup=kb_contacts()); return
-
-    if 'моє авто' in tlo or 'мое авто' in tlo:
         client = get_client(uid)
         if not client:
             await update.message.reply_text(
@@ -666,6 +648,7 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('\n'.join(lines), reply_markup=btns); return
 
     if 'написати' in tlo or 'менеджер' in tlo:
+        ud.clear()
         await update.message.reply_text(
             'Оберiть, до якого сервiсу звертаєтесь:',
             reply_markup=kb_write_choice()); return
@@ -680,8 +663,13 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     car    = client['car']   if client else 'не вказано'
     sto    = ud.get('write_sto', 'обидва СТО')
     fwd    = 'Клiєнт пише ({}):\n{} | {} | {}\n\n{}'.format(sto, cname, phone, car, text)
-    ctx.bot_data['last_client_{}' .format(uid)] = uid
+    ctx.bot_data['last_client_{}'.format(uid)] = uid
     await notify_staff(ctx.bot, fwd, client_id=uid)
+    # Показуємо меню клiєнту якщо його ще немає
+    kb = client_kb(uid)
+    await update.message.reply_text(
+        'Менеджер вiдповiсть найближчим часом.',
+        reply_markup=kb)
 
 async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q    = update.callback_query
@@ -875,6 +863,7 @@ def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler('start', cmd_start))
     app.add_handler(CommandHandler('menu',  cmd_start))
+    app.add_handler(CommandHandler('help',  cmd_start))
     app.add_handler(CallbackQueryHandler(handle_cb))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
     logger.info('СТО бот v6 запущен! CLAUDE=%s STAFF=%s', bool(claude_client), STAFF_IDS)
