@@ -208,7 +208,7 @@ async def to_client(bot, cid, text):
 
 async def to_staff(bot, msg, client_id=None):
     kb = InlineKeyboardMarkup([[InlineKeyboardButton(
-        'Вiдповiсти', callback_data='reply_{}'.format(client_id))]]) if client_id else None
+        '↩️ Вiдповiсти', callback_data='reply_{}'.format(client_id))]]) if client_id else None
     for uid in STAFF_IDS:
         try: await bot.send_message(chat_id=uid, text=msg, reply_markup=kb)
         except Exception as e: logger.error('staff %s: %s', uid, e)
@@ -222,20 +222,20 @@ def addr(sto_key):
 
 def kb_new():
     return ReplyKeyboardMarkup([
-        ['Послуги та цiни', 'Контакти'],
-        ['Написати менеджеру'],
+        ['🛠 Послуги та цiни', '📍 Контакти'],
+        ['💬 Написати менеджеру'],
     ], resize_keyboard=True, is_persistent=True)
 
 def kb_reg():
     return ReplyKeyboardMarkup([
-        ['Послуги та цiни', 'Контакти'],
-        ['Моє авто', 'Написати менеджеру'],
+        ['🛠 Послуги та цiни', '📍 Контакти'],
+        ['🚗 Моє авто', '💬 Написати менеджеру'],
     ], resize_keyboard=True, is_persistent=True)
 
 def kb_staff():
     return ReplyKeyboardMarkup([
-        ['Новi заявки', 'Всi активнi'],
-        ['Авто готове', 'Клiєнти'],
+        ['📥 Новi заявки', '📋 Всi активнi'],
+        ['✅ Авто готове', '👥 Клiєнти'],
     ], resize_keyboard=True, is_persistent=True)
 
 def ckb(uid): return kb_reg() if get_client(uid) else kb_new()
@@ -245,51 +245,51 @@ def kb_sto(prefix='menu'):
     c_s = CONTACTS['sto']
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(
-            'Кузовний сервiс ({})'.format(c_b['address']),
+            '🚗 Кузовний сервiс ({})'.format(c_b['address']),
             callback_data='{}_body'.format(prefix))],
         [InlineKeyboardButton(
-            'СТО ({})'.format(c_s['address']),
+            '🔧 СТО ({})'.format(c_s['address']),
             callback_data='{}_sto'.format(prefix))],
     ])
 
 def kb_write():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Кузовний сервiс (Чубинського)', callback_data='write_body')],
-        [InlineKeyboardButton('СТО (Хмельницького)',           callback_data='write_sto')],
+        [InlineKeyboardButton('🚗 Кузовний сервiс (Чубинського)', callback_data='write_body')],
+        [InlineKeyboardButton('🔧 СТО (Хмельницького)', callback_data='write_sto')],
     ])
 
 def kb_svcs(sto_key):
     c = CONTACTS[sto_key]
     btns = [
-        [InlineKeyboardButton('Навiгатор', url=c['maps'])],
+        [InlineKeyboardButton('🧭 Навiгатор', url=c['maps'])],
     ]
     for svc in SERVICES[sto_key]:
         btns.append([InlineKeyboardButton(svc['name'], callback_data='svc_{}_{}'.format(sto_key, svc['id']))])
-    btns.append([InlineKeyboardButton('Написати менеджеру', callback_data='ask_{}'.format(sto_key))])
+    btns.append([InlineKeyboardButton('💬 Написати менеджеру', callback_data='ask_{}'.format(sto_key))])
     return InlineKeyboardMarkup(btns)
 
 def kb_svc_detail(sto_key):
     c = CONTACTS[sto_key]
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Написати менеджеру', callback_data='ask_{}'.format(sto_key))],
-        [InlineKeyboardButton('Навiгатор', url=c['maps'])],
-        [InlineKeyboardButton('Назад до списку', callback_data='menu_{}'.format(sto_key))],
+        [InlineKeyboardButton('💬 Написати менеджеру', callback_data='ask_{}'.format(sto_key))],
+        [InlineKeyboardButton('🧭 Навiгатор', url=c['maps'])],
+        [InlineKeyboardButton('⬅️ Назад до списку', callback_data='menu_{}'.format(sto_key))],
     ])
 
 def kb_contacts():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Навiгатор: СТО', url=CONTACTS['sto']['maps'])],
-        [InlineKeyboardButton('Навiгатор: Кузовний сервiс', url=CONTACTS['body']['maps'])],
+        [InlineKeyboardButton('🧭 Навiгатор: СТО', url=CONTACTS['sto']['maps'])],
+        [InlineKeyboardButton('🧭 Навiгатор: Кузовний сервiс', url=CONTACTS['body']['maps'])],
     ])
 
 def kb_skip():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('Пропустити', callback_data='skip')],
-        [InlineKeyboardButton('Завершити', callback_data='finish_mycar')],
+        [InlineKeyboardButton('⏭ Пропустити', callback_data='skip')],
+        [InlineKeyboardButton('✅ Завершити', callback_data='finish_mycar')],
     ])
 
 def kb_mycar_update():
-    return InlineKeyboardMarkup([[InlineKeyboardButton('Оновити данi авто', callback_data='start_mycar')]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton('🔄 Оновити данi авто', callback_data='start_mycar')]])
 
 MYCAR_FIELDS  = ['name','phone','car','ins_end','oil_odo','oil_date','grm_odo','grm_date']
 MYCAR_PROMPTS = {
