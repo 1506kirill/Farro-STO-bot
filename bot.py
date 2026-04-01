@@ -51,31 +51,31 @@ _photo_cache: Dict[str, str] = {}
 
 SERVICES = {
     'sto': [
-        {'id':'gbo',    'name':'ГБО — газове обладнання',
+        {'id':'gbo',    'name':'⛽ ГБО — газове обладнання',
          'text':'Встановлення та обслуговування ГБО\n\nВстановлення ГБО на 4 цилiндри — вiд 19 600 грн\nВстановлення ГБО на 6 цилiндрiв — вiд 30 500 грн\nПланове ТО ГБО — вiд 650 грн\nКомп\'ютерна дiагностика — 400 грн\nСертифiкацiя ГБО — 3 000 грн\n\nНайбiльший склад ГБО в областi.\n\nhttps://farro.ua/install/'},
-        {'id':'cond',   'name':'Автокондицiонери',
+        {'id':'cond',   'name':'❄️ Автокондицiонери',
          'text':'Дiагностика та ремонт кондицiонерiв\n\nДiагностика та пiдключення — 400 грн\n1 гр фреону — 1,8 грн\n1 гр компресорного масла — 10 грн\n\nТакож:\nРемонт трубок кондицiонера\nПошук витоку фреону\nПромивка системи кондицiонування\n\nВажливо: точна кiлькiсть фреону визначається лише пiсля вiдкачування та зважування.\n\nhttps://farro.ua/kondicionery/'},
-        {'id':'engine', 'name':'Двигуни',
+        {'id':'engine', 'name':'🛠 Двигуни',
          'text':'Дiагностика та ремонт двигунiв\n\nЗамiна моторного масла — 400 грн\nКомп\'ютерна дiагностика — 400 грн\nЗамiна ГРМ — вiд 3 500 грн\nРегулювання клапанiв — вiд 1 500 грн\nДiагностика ендоскопом — вiд 1 500 грн\nЗамiр компресiї — вiд 1 200 грн\n\nhttps://farro.ua/kondicionery/'},
-        {'id':'wheel',  'name':'Розвал-сходження 3D',
+        {'id':'wheel',  'name':'🎯 Розвал-сходження 3D',
          'text':'Точне регулювання кутiв встановлення колiс\n\nОдна вiсь — вiд 600 грн\nДвi осi — 1 000 грн\n\nhttps://farro.ua/razval-shozhdenie/'},
-        {'id':'cool',   'name':'Промивка системи охолодження',
+        {'id':'cool',   'name':'🌡 Промивка системи охолодження',
          'text':'Промивка та замiна антифризу\n\nЗамiна антифризу — вiд 600 грн\nПошук витоку антифризу — 700 грн\nПромивка радiатора пiчки — вiд 1 700 грн\nПромивка всiєї системи — вiд 4 000 грн\n\nhttps://farro.ua/promyvka-ohlazhdeniya/'},
-        {'id':'lights', 'name':'Ремонт фар та бамперiв',
+        {'id':'lights', 'name':'💡 Ремонт фар та бамперiв',
          'text':'Ремонт та полiрування фар i бамперiв\n\nПолiрування фари — 1 500 грн\nПайка трiщини — 1 000 грн\nВiдновлення вуха фари — вiд 1 000 грн\n\nhttps://farro.ua/remont-far-i-bamperov/'},
-        {'id':'susp',   'name':'Ремонт ходової',
+        {'id':'susp',   'name':'🚙 Ремонт ходової',
          'text':'Дiагностика та ремонт ходової\n\nДiагностика — 300 грн\nЗамiна переднiх колодок — 600 грн\nЗамiна амортизатора або пружини — 1 200 грн\nЗамiна ступицi — 700 грн\nЗняття важеля — вiд 500 грн\nЗамiна сайлентблока — вiд 350 грн\nЗамiна шарової опори — вiд 350 грн\n\nhttps://farro.ua/remont-hodovoj/'},
-        {'id':'exh',    'name':'Вихлопнi системи',
+        {'id':'exh',    'name':'💨 Вихлопнi системи',
          'text':'Ремонт системи вихлопу\n\nДiагностика — 200 грн\nЗамiна гофри — вiд 1 200 грн\n\nhttps://farro.ua/remont-vyhlopnoj/'},
-        {'id':'diag',   'name':'Дiагностика перед купiвлею авто',
+        {'id':'diag',   'name':'🔎 Дiагностика перед купiвлею авто',
          'text':'Комплексна перевiрка авто перед покупкою\n\nДiагностика ходової — 300 грн\nДiагностика ЛКП — 700 грн\nДiагностика ендоскопом — вiд 1 500 грн\nДiагностика кондицiонера — 700 грн\nКомп\'ютерна дiагностика — 400 грн\nДiагностика ГБО — 400 грн'},
     ],
     'body': [
-        {'id':'riht',  'name':'Рихтування авто',
+        {'id':'riht',  'name':'🔨 Рихтування авто',
          'text':'Вiдновлення геометрiї кузова\n\nЗамiна порога — вiд 3 000 грн\nЗамiна полотна даху — вiд 20 000 грн\nВитяжка лонжерона — вiд 10 000 грн\nРихтування порога — вiд 2 000 грн\nЗамiна лобового скла — 3 000 грн\n\nhttps://farro.ua/rihtovka-avto/'},
-        {'id':'paint', 'name':'Покраска авто',
+        {'id':'paint', 'name':'🎨 Покраска авто',
          'text':'Професiйне фарбування з пiдбором кольору\n\nПокраска однiєї деталi — 4 500 грн + матерiали\nПокраска деталi трьохшаровою фарбою — 6 000 грн + матерiали\nПовне перефарбування авто — вiд 70 000 грн + матерiали\n\nВажливо: вартiсть матерiалiв розраховує маляр пiсля огляду авто.\n\nhttps://farro.ua/pokraska-avto/'},
-        {'id':'pdr',   'name':'Видалення вм\'ятин PDR',
+        {'id':'pdr',   'name':'🫟 Видалення вм\'ятин PDR',
          'text':'Видалення вм\'ятин без покраски\n\nНевелика вм\'ятина — вiд 600 грн\nСередня вм\'ятина — вiд 1 000 грн\nПошкодження вiд граду — вiд 3 000 грн\n\nPDR зберiгає оригiнальне лакофарбове покриття.\n\nhttps://farro.ua/rihtovka-avto/'},
     ],
 }
@@ -218,8 +218,6 @@ def addr(sto_key):
     note = ' {}'.format(c['note']) if c.get('note') else ''
     return c['address'] + note
 
-# ── Keyboards ────────────────────────────────────────────────
-
 def kb_new():
     return ReplyKeyboardMarkup([
         ['🛠 Послуги та цiни', '📍 Контакти'],
@@ -310,8 +308,6 @@ REG_PROMPTS = {
     'car':   'Марка та модель авто (необов\'язково)',
 }
 
-# ── Handlers ─────────────────────────────────────────────────
-
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
     name = update.effective_user.first_name or 'Клiєнт'
@@ -332,12 +328,10 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ud   = ctx.user_data
     tlo  = text.lower()
 
-    # Якщо кнопка меню — скидаємо всi активнi процеси
     if is_menu_btn(text) and not is_staff(uid):
         if 'reg_step' in ud or 'mycar_step' in ud:
             ud.clear()
 
-    # ── Реєстрацiя ────────────────────────────────────────────
     if ud.get('reg_step'):
         step = ud['reg_step']
         data = ud.setdefault('reg_data',{})
@@ -353,7 +347,6 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ud.clear(); ud['write_sto'] = sto_key
         await update.message.reply_text('Дякуємо! Напишiть ваше питання.', reply_markup=ckb(uid)); return
 
-    # ── Заповнення профiлю авто ────────────────────────────────
     if ud.get('mycar_step'):
         step = ud['mycar_step']
         data = ud.setdefault('mycar_data',{})
@@ -371,7 +364,6 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ud.clear()
         await update.message.reply_text('Данi збережено!', reply_markup=kb_reg()); return
 
-    # ── Вiдповiдь менеджера клiєнту ───────────────────────────
     if ud.get('reply_to'):
         cid = ud.pop('reply_to')
         polished = polish(text)
@@ -379,7 +371,6 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except Exception as e: logger.error('reply: %s', e)
         return
 
-    # ── Менеджер: команди ─────────────────────────────────────
     if is_staff(uid):
         if 'новi' in tlo or 'заявки' in tlo:
             ws    = get_ws('Заказы')
@@ -424,7 +415,6 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text('Оберiть дiю:', reply_markup=kb_staff()); return
 
-    # ── Клiєнт: кнопки меню ───────────────────────────────────
     if 'послуги' in tlo or 'цiни' in tlo:
         await update.message.reply_text('Оберiть сервiс:', reply_markup=kb_sto()); return
 
@@ -464,7 +454,6 @@ async def handle_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if 'записат' in tlo:
         await update.message.reply_text('Оберiть сервiс для запису:', reply_markup=kb_sto()); return
 
-    # ── Будь-яке повiдомлення → до менеджера ──────────────────
     client = get_client(uid)
     cname  = client['name']  if client else 'Новий клiєнт'
     phone  = client['phone'] if client else 'не вказано'
