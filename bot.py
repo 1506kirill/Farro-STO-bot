@@ -47,6 +47,22 @@ CONTACTS = {
 
 PHOTO_BODY = '/app/photo_body.jpg'
 PHOTO_STO  = '/app/photo_sto.jpg'
+
+# Фото карточек услуг
+PHOTO_SERVICES = {
+    'cond':   '/app/images/Cold.jpg',
+    'exh':    '/app/images/Gofra.jpg',
+    'susp':   '/app/images/hodovka.jpg',
+    'gbo':    '/app/images/Montag.jpg',
+    'engine': '/app/images/Motor.jpg',
+    'paint':  '/app/images/Paint.jpg',
+    'lights': '/app/images/Plastic.jpg',
+    'riht':   '/app/images/Riht.jpg',
+    'pdr':    '/app/images/PDR.png',
+    'cool':   '/app/images/Pechka.png',
+    'wheel':  '/app/images/Razval.png',
+}
+
 _photo_cache: Dict[str, str] = {}
 
 SERVICES = {
@@ -193,15 +209,50 @@ def status_lbl(s):
     return {'new':'Нова','confirmed':'Пiдтверджено','in_work':'В роботi',
             'ready':'Готово','issued':'Видано'}.get(s,s)
 
-async def send_photo(bot, chat_id, path, caption=''):
+async def send_photo(bot, chat_id, path, caption='', reply_markup=None):
     if path in _photo_cache:
-        await bot.send_photo(chat_id=chat_id, photo=_photo_cache[path], caption=caption); return
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=_photo_cache[path],
+            caption=caption,
+            reply_markup=reply_markup
+        )
+        return
     try:
         with open(path,'rb') as f:
-            msg = await bot.send_photo(chat_id=chat_id, photo=f, caption=caption)
+            msg = await bot.send_photo(
+                chat_id=chat_id,
+                photo=f,
+                caption=caption,
+                reply_markup=reply_markup
+            )
         _photo_cache[path] = msg.photo[-1].file_id
     except Exception as e:
         logger.error('photo %s: %s', path, e)
+        if caption:
+            await bot.send_message(chat_id=chat_id, text=caption, reply_markup=reply_markup)
+
+async def replace_or_send_text(q, ctx, text, reply_markup=None):
+    try:
+        if getattr(q.message, 'photo', None):
+            try:
+                await q.message.delete()
+            except Exception:
+                pass
+            await ctx.bot.send_message(
+                chat_id=q.message.chat_id,
+                text=text,
+                reply_markup=reply_markup
+            )
+        else:
+            await q.edit_message_text(text, reply_markup=reply_markup)
+    except Exception as e:
+        logger.error('replace_or_send_text: %s', e)
+        await ctx.bot.send_message(
+            chat_id=q.message.chat_id,
+            text=text,
+            reply_markup=reply_markup
+        )
 
 async def to_client(bot, cid, text):
     await bot.send_message(chat_id=int(cid), text=text)
@@ -210,13 +261,17 @@ async def to_staff(bot, msg, client_id=None):
     kb = InlineKeyboardMarkup([[InlineKeyboardButton(
         '↩️ Вiдповiсти', callback_data='reply_{}'.format(client_id))]]) if client_id else None
     for uid in STAFF_IDS:
-        try: await bot.send_message(chat_id=uid, text=msg, reply_markup=kb)
-        except Exception as e: logger.error('staff %s: %s', uid, e)
+        try:
+            await bot.send_message(chat_id=uid, text=msg, reply_markup=kb)
+        except Exception as e:
+            logger.error('staff %s: %s', uid, e)
 
 def addr(sto_key):
     c = CONTACTS[sto_key]
     note = ' {}'.format(c['note']) if c.get('note') else ''
     return c['address'] + note
+
+# ── Keyboards ────────────────────────────────────────────────
 
 def kb_new():
     return ReplyKeyboardMarkup([
@@ -307,6 +362,8 @@ REG_PROMPTS = {
     'name':  'Як вас звати? (необов\'язково)',
     'car':   'Марка та модель авто (необов\'язково)',
 }
+
+# ── Handlers ─────────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
@@ -472,7 +529,8 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if data == 'cancel':
         ud.clear()
-        await q.edit_message_text('Скасовано.'); return
+        await replace_or_send_text(q, ctx, 'Скасовано.')
+        return
 
     if data == 'skip':
         step = ud.get('mycar_step') or ud.get('reg_step')
@@ -510,19 +568,24 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if data == 'start_mycar':
         ud['mycar_step'] = 'name'
         ud['mycar_data'] = {}
-        await q.edit_message_text(
+        await replace_or_send_text(
+            q, ctx,
             'Заповнiть данi про ваш автомобiль.\nВсi поля необов\'язковi.\n\n'
             '{} (необов\'язково):'.format(MYCAR_PROMPTS['name']),
-            reply_markup=kb_skip()); return
+            reply_markup=kb_skip()
+        )
+        return
 
     if data.startswith('menu_'):
         sto_key = data[5:]
-        if sto_key not in CONTACTS: return
+        if sto_key not in CONTACTS:
+            return
         c = CONTACTS[sto_key]
         note = ' {}'.format(c['note']) if c.get('note') else ''
         msg = '{}\n\nАдреса: {}{}\nГрафiк: {}\nТел.:\n{}\n\nОберiть послугу:'.format(
             c['name'], c['address'], note, c['hours'], PHONES)
-        await q.edit_message_text(msg, reply_markup=kb_svcs(sto_key)); return
+        await replace_or_send_text(q, ctx, msg, reply_markup=kb_svcs(sto_key))
+        return
 
     if data.startswith('svc_'):
         parts   = data[4:].split('_',1)
@@ -530,20 +593,50 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         svc_id  = parts[1] if len(parts)>1 else ''
         svc     = next((s for s in SERVICES[sto_key] if s['id']==svc_id), None)
         if not svc:
-            await q.edit_message_text('Послугу не знайдено.'); return
+            await replace_or_send_text(q, ctx, 'Послугу не знайдено.')
+            return
+
         c    = CONTACTS[sto_key]
         note = ' {}'.format(c['note']) if c.get('note') else ''
         msg  = '{}\n\n{}\n\nАдреса: {}{}\nГрафiк: {}\nТел.:\n{}'.format(
             svc['name'], svc['text'], c['address'], note, c['hours'], PHONES)
-        if len(msg)>4000: msg = msg[:3990]+'...'
-        await q.edit_message_text(msg, reply_markup=kb_svc_detail(sto_key)); return
+        if len(msg) > 1024:
+            msg = msg[:1014] + '...'
+
+        photo_path = PHOTO_SERVICES.get(svc_id)
+
+        if photo_path:
+            try:
+                if getattr(q.message, 'photo', None) or getattr(q.message, 'text', None):
+                    await q.message.delete()
+            except Exception as e:
+                logger.error('delete svc menu msg: %s', e)
+
+            await send_photo(
+                ctx.bot,
+                q.message.chat_id,
+                photo_path,
+                caption=msg,
+                reply_markup=kb_svc_detail(sto_key)
+            )
+        else:
+            # если фото нет, показываем как раньше
+            full_msg = '{}\n\n{}\n\nАдреса: {}{}\nГрафiк: {}\nТел.:\n{}'.format(
+                svc['name'], svc['text'], c['address'], note, c['hours'], PHONES)
+            if len(full_msg) > 4000:
+                full_msg = full_msg[:3990] + '...'
+            await replace_or_send_text(q, ctx, full_msg, reply_markup=kb_svc_detail(sto_key))
+        return
 
     if data.startswith('ask_'):
         sto_key = data[4:]
         ud['write_sto'] = sto_key
         c = CONTACTS.get(sto_key, CONTACTS['sto'])
-        await q.edit_message_text(
-            'Напишiть ваше питання — менеджер {} вiдповiсть.'.format(c['name'])); return
+        await replace_or_send_text(
+            q, ctx,
+            'Напишiть ваше питання — менеджер {} вiдповiсть.'.format(c['name'])
+        )
+        return
 
     if data.startswith('write_'):
         sto_key = data[6:]
@@ -552,17 +645,24 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             ud['reg_sto']  = sto_key
             ud['reg_step'] = 'phone'
             ud['reg_data'] = {}
-            await q.edit_message_text(
+            await replace_or_send_text(
+                q, ctx,
                 'Ваш номер телефону (щоб менеджер мiг зв\'язатись):',
-                reply_markup=kb_skip()); return
+                reply_markup=kb_skip()
+            )
+            return
         ud['write_sto'] = sto_key
         c = CONTACTS[sto_key]
-        await q.edit_message_text(
-            'Напишiть ваше питання — менеджер {} вiдповiсть.'.format(c['name'])); return
+        await replace_or_send_text(
+            q, ctx,
+            'Напишiть ваше питання — менеджер {} вiдповiсть.'.format(c['name'])
+        )
+        return
 
     if data.startswith('reply_'):
         ud['reply_to'] = int(data[6:])
-        await q.edit_message_text(''); return
+        await replace_or_send_text(q, ctx, '')
+        return
 
     if data.startswith('ready_'):
         rid  = data[6:]
@@ -575,24 +675,34 @@ async def handle_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 svc  = row[7] if len(row)>7 else ''
                 name = row[6] if len(row)>6 else ''
                 if cid:
-                    try: await to_client(ctx.bot, cid,
-                        'Ваш автомобiль готовий.\n\nАвто: {}\nПослуга: {}\n{}\n\nЧекаємо вас.'.format(car,svc,name))
-                    except Exception as e: logger.error('ready: %s', e)
-                await q.edit_message_text('Заявка {} — готова.'.format(rid)); return
-        await q.edit_message_text('Не знайдено.'); return
+                    try:
+                        await to_client(ctx.bot, cid,
+                            'Ваш автомобiль готовий.\n\nАвто: {}\nПослуга: {}\n{}\n\nЧекаємо вас.'.format(car,svc,name))
+                    except Exception as e:
+                        logger.error('ready: %s', e)
+                await replace_or_send_text(q, ctx, 'Заявка {} — готова.'.format(rid))
+                return
+        await replace_or_send_text(q, ctx, 'Не знайдено.')
+        return
 
     if data.startswith('wc_'):
         cid = data[3:]
         ws  = get_ws('Клиенты')
-        cn = cid; car = ''
+        cn = cid
+        car = ''
         for r in ws.get_all_values()[1:]:
-            if str(r[0]).strip()==cid:
+            if str(r[0]).strip() == cid:
                 cn = r[1] if len(r)>1 else cn
                 car = r[3] if len(r)>3 else ''
                 break
         ud['reply_to'] = int(cid)
-        await q.edit_message_text('Клiєнт: {} {}. Напишiть повiдомлення:'.format(
-            cn,'({})'.format(car) if car else '')); return
+        await replace_or_send_text(
+            q, ctx,
+            'Клiєнт: {} {}. Напишiть повiдомлення:'.format(
+                cn, '({})'.format(car) if car else ''
+            )
+        )
+        return
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
